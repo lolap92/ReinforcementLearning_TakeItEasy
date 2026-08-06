@@ -1,0 +1,18 @@
+[
+  {
+    "name": "Random Agent",
+    "n_episodes": 1000,
+    "mean": 10.361,
+    "std": 14.363658273573622,
+    "min": 0.0,
+    "max": 79.0
+  },
+  {
+    "name": "Greedy Heuristik",
+    "n_episodes": 1000,
+    "mean": 27.733,
+    "std": 22.51874132805828,
+    "min": 0.0,
+    "max": 128.0
+  }
+]
