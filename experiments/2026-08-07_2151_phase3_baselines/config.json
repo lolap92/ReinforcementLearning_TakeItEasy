@@ -1,0 +1,14 @@
+{
+  "run_id": "2026-08-07_2151_phase3_baselines",
+  "tag": "phase3_baselines",
+  "timestamp": "2026-08-07T21:51:18+00:00",
+  "git_commit": "e89f794",
+  "env": "TakeItEasyEnv",
+  "agents": [
+    "random",
+    "greedy"
+  ],
+  "episodes_per_agent": 1000,
+  "master_seed": 0,
+  "n_trajectories_recorded": 20
+}

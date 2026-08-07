@@ -1,2 +1,9 @@
 __pycache__/
 *.pyc
+
+# Trainings-Artefakte: zu groß/binär fürs Repo, lokal reproduzierbar aus
+# experiments/<run>/config.json (Seed + Git-Commit + Hyperparameter)
+experiments/*/models/
+experiments/*/tensorboard/
+models/
+tensorboard/
