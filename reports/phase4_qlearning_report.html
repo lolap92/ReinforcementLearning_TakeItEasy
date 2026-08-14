@@ -1,0 +1,387 @@
+<meta charset="utf-8">
+<title>Take It Easy – Q-Learning Mini-Board (Phase 4)</title>
+<style>
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --ink: #17160f;
+    --ink-2: #57544a;
+    --ink-muted: #8c8878;
+    --line: #e4e1d7;
+    --line-strong: #d6d2c4;
+    --accent: #2a78d6;
+    --accent-wash: rgba(42, 120, 214, 0.10);
+    --ref-optimal: #1baf7a;
+    --ref-random: #8c8878;
+    --shadow: 0 1px 2px rgba(23, 22, 15, 0.04), 0 8px 24px rgba(23, 22, 15, 0.05);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      --bg: #14130f;
+      --surface: #1c1b16;
+      --ink: #f5f3ec;
+      --ink-2: #c7c3b5;
+      --ink-muted: #8c8878;
+      --line: #322f26;
+      --line-strong: #3d392c;
+      --accent: #3987e5;
+      --accent-wash: rgba(57, 135, 229, 0.14);
+      --ref-optimal: #199e70;
+      --ref-random: #8c8878;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14130f; --surface: #1c1b16; --ink: #f5f3ec; --ink-2: #c7c3b5;
+    --ink-muted: #8c8878; --line: #322f26; --line-strong: #3d392c;
+    --accent: #3987e5; --accent-wash: rgba(57, 135, 229, 0.14);
+    --ref-optimal: #199e70; --ref-random: #8c8878;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.35);
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: #f7f6f2; --surface: #ffffff; --ink: #17160f; --ink-2: #57544a;
+    --ink-muted: #8c8878; --line: #e4e1d7; --line-strong: #d6d2c4;
+    --accent: #2a78d6; --accent-wash: rgba(42, 120, 214, 0.10);
+    --ref-optimal: #1baf7a; --ref-random: #8c8878;
+    --shadow: 0 1px 2px rgba(23, 22, 15, 0.04), 0 8px 24px rgba(23, 22, 15, 0.05);
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 780px; margin: 0 auto; padding: 56px 24px 80px; display: flex; flex-direction: column; gap: 40px; }
+
+  .eyebrow {
+    font-size: 12px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-muted); display: flex; align-items: center; gap: 8px;
+  }
+  .eyebrow .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+  h1 { font-size: 30px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; margin: 10px 0 0; text-wrap: balance; }
+  .lede { font-size: 16px; line-height: 1.65; color: var(--ink-2); max-width: 64ch; margin: 14px 0 0; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  section { display: flex; flex-direction: column; gap: 16px; }
+  h2 { font-size: 13px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); margin: 0; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 24px 24px 20px; }
+
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 4px; font-size: 13px; color: var(--ink-2); }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .swatch { width: 16px; height: 2px; border-radius: 1px; flex: none; }
+  .swatch.accent { background: var(--accent); height: 3px; }
+  .swatch.optimal { background: repeating-linear-gradient(to right, var(--ref-optimal) 0 4px, transparent 4px 7px); }
+  .swatch.random { background: repeating-linear-gradient(to right, var(--ref-random) 0 4px, transparent 4px 7px); }
+
+  .chart-wrap { position: relative; }
+  svg#chart { width: 100%; height: auto; display: block; overflow: visible; }
+  .axis-label { fill: var(--ink-muted); font-size: 11px; font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; }
+  .gridline { stroke: var(--line); stroke-width: 1; }
+  .baseline { stroke: var(--line-strong); stroke-width: 1; }
+  .curve-area { fill: var(--accent-wash); }
+  .curve-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .ref-line { fill: none; stroke-width: 1.5; stroke-dasharray: 4 3; }
+  .ref-label { font-size: 11px; font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; font-weight: 600; }
+  .crosshair { stroke: var(--line-strong); stroke-width: 1; opacity: 0; }
+  .hover-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; opacity: 0; }
+  .hit-rect { fill: transparent; cursor: crosshair; }
+
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--ink); color: var(--bg);
+    font-size: 12px; line-height: 1.5; padding: 8px 10px; border-radius: 6px; box-shadow: var(--shadow);
+    opacity: 0; transform: translate(-50%, calc(-100% - 12px)); transition: opacity 0.1s ease;
+    white-space: nowrap; z-index: 10; font-variant-numeric: tabular-nums;
+  }
+  .tooltip.visible { opacity: 1; }
+  .tooltip b { font-weight: 650; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: right; padding: 10px 4px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; }
+  th:first-child, td:first-child { text-align: left; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  thead th { color: var(--ink-muted); font-weight: 600; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; border-bottom: 1px solid var(--line-strong); }
+  tbody tr:last-child td { border-bottom: none; }
+  td.agent { display: flex; align-items: center; gap: 8px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-weight: 550; }
+  .dot-inline { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+
+  p { font-size: 15px; line-height: 1.7; color: var(--ink-2); margin: 0; }
+  p + p { margin-top: 12px; }
+  .callout { border-left: 2px solid var(--accent); padding: 2px 0 2px 16px; }
+  .callout.warn { border-left-color: var(--ref-optimal); }
+
+  code { font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; font-size: 0.9em; background: var(--accent-wash); padding: 1px 5px; border-radius: 4px; }
+
+  .trace { display: flex; flex-direction: column; gap: 0; }
+  .trace-step {
+    padding: 16px 0; border-bottom: 1px solid var(--line);
+    display: grid; grid-template-columns: auto 1fr; gap: 4px 16px;
+  }
+  .trace-step:last-child { border-bottom: none; }
+  .trace-num {
+    grid-row: span 4; width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent-wash); color: var(--accent); font-weight: 650; font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .trace-line { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; }
+  .trace-line b { color: var(--ink); font-weight: 650; }
+  .trace-line .action { color: var(--accent); font-weight: 650; }
+  .trace-formula { font-size: 13px; color: var(--ink-muted); }
+
+  .next { font-size: 13px; color: var(--ink-muted); border-top: 1px solid var(--line); padding-top: 20px; }
+  .next b { color: var(--ink-2); }
+</style>
+
+<div class="page">
+  <header>
+    <div class="eyebrow"><span class="dot"></span>Take It Easy · RL-Lernprojekt · Phase 4</div>
+    <h1>Tabular Q-Learning: die Update-Regel beim Lernen zusehen</h1>
+    <p class="lede">
+      Das echte 19-Felder-Board hat einen Zustandsraum, der für eine simple
+      Tabelle unmöglich ist. Also erst ein <strong>Mini-Board</strong>: 3 Felder
+      in Y-Form (Zentrum A, Arme B und C), Kacheln mit nur einem Wert aus
+      {1, 5, 9}. Klein genug, um die exakt optimale Lösung direkt auszurechnen
+      – und jeden einzelnen Schritt der Lernregel von Hand nachzuvollziehen.
+    </p>
+  </header>
+
+  <section>
+    <h2>Lernkurve über 100.000 Trainings-Episoden</h2>
+    <div class="card">
+      <div class="legend">
+        <span class="legend-item"><span class="swatch accent"></span>Q-Learning (gleitender Ø über 200 Episoden)</span>
+        <span class="legend-item"><span class="swatch optimal"></span>Optimal (exakt, 8.89)</span>
+        <span class="legend-item"><span class="swatch random"></span>Zufall (6.56)</span>
+      </div>
+      <div class="chart-wrap">
+        <svg id="chart" viewBox="0 0 860 380" role="img" aria-label="Lernkurve: gleitender Durchschnitts-Reward des Q-Learning-Agenten über 100000 Trainingsepisoden, mit Referenzlinien für die optimale und die zufällige Strategie"></svg>
+        <div class="tooltip" id="tooltip"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Ergebnis nach dem Training</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>Agent</th><th>Episoden</th><th>Mittelwert</th><th>Std.-Abw.</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="agent"><span class="dot-inline" style="background:var(--ref-random)"></span>Zufall (Mini-Board)</td>
+            <td>1.000</td><td>6,56</td><td>8,94</td>
+          </tr>
+          <tr>
+            <td class="agent"><span class="dot-inline" style="background:var(--accent)"></span>Q-Learning (gelernt)</td>
+            <td>1.000</td><td>8,81</td><td>8,95</td>
+          </tr>
+          <tr>
+            <td class="agent"><span class="dot-inline" style="background:var(--ref-optimal)"></span>Optimal (exakt, DP)</td>
+            <td>–</td><td>8,89</td><td>0,00</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      8,81 von 8,89 möglichen Punkten im Schnitt – <b>99,1 % des exakt
+      berechneten Optimums.</b> Anders als bei den Baselines aus Phase 3 kennen
+      wir hier den bestmöglichen Wert wirklich (nicht nur eine Schätzung
+      "guter Spieler schaffen ungefähr..."), weil das Board klein genug für
+      Backward Induction (Dynamic Programming) ist. Das ist der eigentliche
+      Wert der Mini-Version: eine Lernkurve allein zeigt nur "es wird besser",
+      der Soll-Wert zeigt "es wird <i>so gut wie möglich</i>".
+    </p>
+  </section>
+
+  <section>
+    <h2>Ein Umweg, der zeigt, wie Q-Learning tickt</h2>
+    <div class="card">
+      <div class="callout">
+        <p>
+          Der erste Testlauf (20.000 Episoden) landete bei nur 93 % des
+          Optimums – und hatte den <b>Start-Zustand falsch gelernt</b>: Feld A
+          (Zentrum) statt B/C (Arm), obwohl B/C exakt 11 % mehr erwarteten
+          Score bringt. Kein Bug: mit konstanter Lernrate (<code>alpha=0.1</code>)
+          und schnell sinkendem Epsilon hatte sich der Agent früh auf eine
+          knapp falsche Schätzung festgelegt und danach zu selten erneut
+          erkundet, um sie zu korrigieren – ein reales Konvergenzproblem, kein
+          Implementierungsfehler. Mit 100.000 Episoden löst es sich auf (siehe
+          Kurve oben).
+        </p>
+      </div>
+      <p style="margin-top:16px">
+        Das zeigt auch, warum die einfache Kennzahl "stimmt die gelernte
+        Aktion mit dem Optimum überein?" allein irreführend sein kann: über
+        alle 111 möglichen Zustände lag die Trefferquote bei 93,7&nbsp;%, aber
+        <b>besuchsgewichtet</b> (wie oft die Entscheidung in der Praxis
+        tatsächlich vorkommt) nur bei 84,0&nbsp;% – weil der falsch gelernte
+        Start-Zustand in <i>jeder einzigen Episode</i> auftritt, ein Fehler in
+        einem seltenen Randzustand aber kaum ins Gewicht fällt.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Die Update-Regel von Hand: eine komplette Beispiel-Episode</h2>
+    <div class="card">
+      <p style="margin-bottom: 16px">
+        <code>Q(s,a) ← Q(s,a) + α · ( r + γ·max<sub>a'</sub>Q(s',a') − Q(s,a) )</code>
+        – dieselbe Formel, dreimal angewendet, mit den tatsächlichen Zahlen
+        aus der bereits trainierten Tabelle:
+      </p>
+      <div class="trace">
+        <div class="trace-step">
+          <div class="trace-num">1</div>
+          <div class="trace-line">Zustand s = (A=0, B=0, C=0, Kachel=9) — alle Felder leer</div>
+          <div class="trace-line">Q(s,·) = A: 8.48 · <b>B: 12.80</b> · C: 8.46 → gewählt: Feld <span class="action">B</span></div>
+          <div class="trace-line">Reward r = 0 (Episode läuft weiter), Folgezustand s' = (0,9,0,9), max Q(s',·) = 22.97</div>
+          <div class="trace-formula">Q(s,B) ← 12.80 + 0.1·(0 + 1.0·22.97 − 12.80) = 12.80 + 0.1·10.17 = <b>13.82</b></div>
+        </div>
+        <div class="trace-step">
+          <div class="trace-num">2</div>
+          <div class="trace-line">Zustand s = (A=0, B=9, C=0, Kachel=9) — B schon belegt, wieder eine 9 gezogen</div>
+          <div class="trace-line">Q(s,·) = <b>A: 22.97</b> · C: 11.52 → gewählt: Feld <span class="action">A</span> (jetzt lohnt sich das Zentrum: ein Nachbar passt schon!)</div>
+          <div class="trace-line">Reward r = 0, Folgezustand s' = (9,9,0,1), max Q(s',·) = 18.00</div>
+          <div class="trace-formula">Q(s,A) ← 22.97 + 0.1·(0 + 1.0·18.00 − 22.97) = 22.97 + 0.1·(−4.97) = <b>22.47</b></div>
+        </div>
+        <div class="trace-step">
+          <div class="trace-num">3</div>
+          <div class="trace-line">Zustand s = (A=9, B=9, C=0, Kachel=1) — nur noch Feld C frei, letzter Zug</div>
+          <div class="trace-line">Einzige gültige Aktion: Feld <span class="action">C</span></div>
+          <div class="trace-line">Reward r = 18 (Episode endet: Linie A–B war schon komplett = 2·9, Feld C bekommt jetzt die 1 → keine zweite Linie)</div>
+          <div class="trace-formula">Q(s,C) ← 18.00 + 0.1·(18 + 1.0·0 − 18.00) = 18.00 + 0.1·0 = <b>18.00</b> (Episode terminal → kein Folgezustand, max-Term entfällt)</div>
+        </div>
+      </div>
+    </div>
+    <p>
+      Zug 2 ist der lehrreichste: nachdem B schon eine 9 hält, springt Q(A)
+      von "eher uninteressant" auf 22,97 – das Zentrum lohnt sich jetzt akut,
+      weil ein Nachbar schon passt. Genau dieses situative Umbewerten, rein
+      aus wiederholter Erfahrung heraus, ohne dass irgendjemand eine Regel wie
+      "bevorzuge Nachbarn von Treffern" einprogrammiert hat, ist der Kern von
+      Q-Learning.
+    </p>
+  </section>
+
+  <p class="next">
+    <b>Nächster Schritt:</b> Phase 5 – DQN via Stable-Baselines3 auf dem
+    vollen 19-Felder-Board. Eine Tabelle ist dort unmöglich (viel zu viele
+    Zustände); ein neuronales Netz übernimmt die Rolle der Q-Tabelle als
+    Funktionsapproximation – die gleiche Update-Idee, aber auf Zustände
+    verallgemeinert, die der Agent noch nie exakt gesehen hat.
+  </p>
+</div>
+
+<script>
+(function () {
+  const curve = [{"episode":199,"avg":6.25},{"episode":448,"avg":6.92},{"episode":697,"avg":6.75},{"episode":946,"avg":6.21},{"episode":1195,"avg":7.0},{"episode":1444,"avg":7.69},{"episode":1693,"avg":6.44},{"episode":1942,"avg":6.71},{"episode":2191,"avg":5.56},{"episode":2440,"avg":7.28},{"episode":2689,"avg":5.83},{"episode":2938,"avg":5.77},{"episode":3187,"avg":7.06},{"episode":3436,"avg":6.83},{"episode":3685,"avg":7.22},{"episode":3934,"avg":5.9},{"episode":4183,"avg":7.06},{"episode":4432,"avg":7.1},{"episode":4681,"avg":7.28},{"episode":4930,"avg":8.76},{"episode":5179,"avg":6.81},{"episode":5428,"avg":6.79},{"episode":5677,"avg":7.74},{"episode":5926,"avg":6.93},{"episode":6175,"avg":6.85},{"episode":6424,"avg":6.45},{"episode":6673,"avg":7.24},{"episode":6922,"avg":7.0},{"episode":7171,"avg":6.89},{"episode":7420,"avg":7.23},{"episode":7669,"avg":7.45},{"episode":7918,"avg":7.29},{"episode":8167,"avg":7.07},{"episode":8416,"avg":5.71},{"episode":8665,"avg":6.74},{"episode":8914,"avg":7.62},{"episode":9163,"avg":6.64},{"episode":9412,"avg":5.59},{"episode":9661,"avg":7.31},{"episode":9910,"avg":6.74},{"episode":10159,"avg":7.48},{"episode":10408,"avg":7.48},{"episode":10657,"avg":6.49},{"episode":10906,"avg":7.7},{"episode":11155,"avg":6.39},{"episode":11404,"avg":7.53},{"episode":11653,"avg":7.13},{"episode":11902,"avg":6.71},{"episode":12151,"avg":7.25},{"episode":12400,"avg":7.62},{"episode":12649,"avg":7.56},{"episode":12898,"avg":6.39},{"episode":13147,"avg":5.66},{"episode":13396,"avg":6.46},{"episode":13645,"avg":6.14},{"episode":13894,"avg":7.24},{"episode":14143,"avg":8.01},{"episode":14392,"avg":7.06},{"episode":14641,"avg":6.83},{"episode":14890,"avg":7.8},{"episode":15139,"avg":6.85},{"episode":15388,"avg":7.69},{"episode":15637,"avg":7.62},{"episode":15886,"avg":6.27},{"episode":16135,"avg":6.71},{"episode":16384,"avg":6.27},{"episode":16633,"avg":6.33},{"episode":16882,"avg":7.68},{"episode":17131,"avg":7.04},{"episode":17380,"avg":8.19},{"episode":17629,"avg":6.72},{"episode":17878,"avg":6.78},{"episode":18127,"avg":6.18},{"episode":18376,"avg":7.16},{"episode":18625,"avg":7.34},{"episode":18874,"avg":7.5},{"episode":19123,"avg":7.16},{"episode":19372,"avg":8.19},{"episode":19621,"avg":5.68},{"episode":19870,"avg":6.05},{"episode":20119,"avg":6.67},{"episode":20368,"avg":6.71},{"episode":20617,"avg":7.27},{"episode":20866,"avg":6.66},{"episode":21115,"avg":7.38},{"episode":21364,"avg":6.35},{"episode":21613,"avg":6.01},{"episode":21862,"avg":7.07},{"episode":22111,"avg":7.38},{"episode":22360,"avg":7.05},{"episode":22609,"avg":5.69},{"episode":22858,"avg":6.85},{"episode":23107,"avg":6.33},{"episode":23356,"avg":6.87},{"episode":23605,"avg":8.1},{"episode":23854,"avg":7.01},{"episode":24103,"avg":7.25},{"episode":24352,"avg":7.22},{"episode":24601,"avg":7.47},{"episode":24850,"avg":6.48},{"episode":25099,"avg":5.87},{"episode":25348,"avg":8.11},{"episode":25597,"avg":6.23},{"episode":25846,"avg":6.45},{"episode":26095,"avg":7.85},{"episode":26344,"avg":6.78},{"episode":26593,"avg":6.97},{"episode":26842,"avg":7.23},{"episode":27091,"avg":7.27},{"episode":27340,"avg":7.43},{"episode":27589,"avg":7.09},{"episode":27838,"avg":6.67},{"episode":28087,"avg":6.98},{"episode":28336,"avg":6.0},{"episode":28585,"avg":6.79},{"episode":28834,"avg":7.98},{"episode":29083,"avg":6.76},{"episode":29332,"avg":7.66},{"episode":29581,"avg":7.61},{"episode":29830,"avg":6.77},{"episode":30079,"avg":6.38},{"episode":30328,"avg":7.3},{"episode":30577,"avg":6.58},{"episode":30826,"avg":7.48},{"episode":31075,"avg":7.37},{"episode":31324,"avg":7.27},{"episode":31573,"avg":6.86},{"episode":31822,"avg":7.52},{"episode":32071,"avg":6.63},{"episode":32320,"avg":6.91},{"episode":32569,"avg":7.37},{"episode":32818,"avg":6.51},{"episode":33067,"avg":6.05},{"episode":33316,"avg":7.09},{"episode":33565,"avg":6.85},{"episode":33814,"avg":6.72},{"episode":34063,"avg":6.94},{"episode":34312,"avg":7.87},{"episode":34561,"avg":7.85},{"episode":34810,"avg":7.39},{"episode":35059,"avg":8.21},{"episode":35308,"avg":7.28},{"episode":35557,"avg":7.27},{"episode":35806,"avg":7.85},{"episode":36055,"avg":5.77},{"episode":36304,"avg":7.24},{"episode":36553,"avg":7.5},{"episode":36802,"avg":7.89},{"episode":37051,"avg":6.84},{"episode":37300,"avg":7.13},{"episode":37549,"avg":7.72},{"episode":37798,"avg":6.64},{"episode":38047,"avg":5.91},{"episode":38296,"avg":7.02},{"episode":38545,"avg":7.29},{"episode":38794,"avg":6.88},{"episode":39043,"avg":7.51},{"episode":39292,"avg":7.45},{"episode":39541,"avg":8.14},{"episode":39790,"avg":7.52},{"episode":40039,"avg":7.05},{"episode":40288,"avg":6.82},{"episode":40537,"avg":7.87},{"episode":40786,"avg":8.4},{"episode":41035,"avg":7.33},{"episode":41284,"avg":7.14},{"episode":41533,"avg":6.98},{"episode":41782,"avg":7.27},{"episode":42031,"avg":7.65},{"episode":42280,"avg":7.96},{"episode":42529,"avg":5.97},{"episode":42778,"avg":5.56},{"episode":43027,"avg":7.46},{"episode":43276,"avg":7.29},{"episode":43525,"avg":8.12},{"episode":43774,"avg":7.68},{"episode":44023,"avg":6.66},{"episode":44272,"avg":6.54},{"episode":44521,"avg":7.55},{"episode":44770,"avg":8.18},{"episode":45019,"avg":7.11},{"episode":45268,"avg":6.79},{"episode":45517,"avg":7.13},{"episode":45766,"avg":7.19},{"episode":46015,"avg":7.34},{"episode":46264,"avg":7.84},{"episode":46513,"avg":7.42},{"episode":46762,"avg":8.33},{"episode":47011,"avg":7.11},{"episode":47260,"avg":8.27},{"episode":47509,"avg":6.65},{"episode":47758,"avg":8.35},{"episode":48007,"avg":7.21},{"episode":48256,"avg":7.05},{"episode":48505,"avg":8.16},{"episode":48754,"avg":7.65},{"episode":49003,"avg":7.67},{"episode":49252,"avg":7.76},{"episode":49501,"avg":8.1},{"episode":49750,"avg":6.6},{"episode":49999,"avg":6.87},{"episode":50248,"avg":7.52},{"episode":50497,"avg":8.14},{"episode":50746,"avg":7.94},{"episode":50995,"avg":7.66},{"episode":51244,"avg":7.2},{"episode":51493,"avg":7.49},{"episode":51742,"avg":6.87},{"episode":51991,"avg":8.49},{"episode":52240,"avg":8.1},{"episode":52489,"avg":6.01},{"episode":52738,"avg":7.06},{"episode":52987,"avg":7.6},{"episode":53236,"avg":7.48},{"episode":53485,"avg":7.28},{"episode":53734,"avg":7.47},{"episode":53983,"avg":7.57},{"episode":54232,"avg":6.57},{"episode":54481,"avg":8.29},{"episode":54730,"avg":7.11},{"episode":54979,"avg":8.44},{"episode":55228,"avg":7.15},{"episode":55477,"avg":7.11},{"episode":55726,"avg":8.94},{"episode":55975,"avg":7.66},{"episode":56224,"avg":8.33},{"episode":56473,"avg":8.42},{"episode":56722,"avg":6.84},{"episode":56971,"avg":8.38},{"episode":57220,"avg":7.4},{"episode":57469,"avg":8.11},{"episode":57718,"avg":8.45},{"episode":57967,"avg":6.97},{"episode":58216,"avg":7.36},{"episode":58465,"avg":7.64},{"episode":58714,"avg":7.64},{"episode":58963,"avg":7.44},{"episode":59212,"avg":7.64},{"episode":59461,"avg":7.5},{"episode":59710,"avg":7.51},{"episode":59959,"avg":7.16},{"episode":60208,"avg":7.79},{"episode":60457,"avg":7.16},{"episode":60706,"avg":8.98},{"episode":60955,"avg":7.83},{"episode":61204,"avg":8.14},{"episode":61453,"avg":7.26},{"episode":61702,"avg":7.15},{"episode":61951,"avg":7.87},{"episode":62200,"avg":7.05},{"episode":62449,"avg":7.02},{"episode":62698,"avg":7.18},{"episode":62947,"avg":7.32},{"episode":63196,"avg":9.02},{"episode":63445,"avg":8.88},{"episode":63694,"avg":7.38},{"episode":63943,"avg":8.36},{"episode":64192,"avg":7.43},{"episode":64441,"avg":8.69},{"episode":64690,"avg":7.5},{"episode":64939,"avg":7.6},{"episode":65188,"avg":9.06},{"episode":65437,"avg":8.64},{"episode":65686,"avg":8.83},{"episode":65935,"avg":6.79},{"episode":66184,"avg":8.5},{"episode":66433,"avg":8.45},{"episode":66682,"avg":7.02},{"episode":66931,"avg":8.54},{"episode":67180,"avg":8.41},{"episode":67429,"avg":8.28},{"episode":67678,"avg":6.89},{"episode":67927,"avg":7.62},{"episode":68176,"avg":7.75},{"episode":68425,"avg":7.92},{"episode":68674,"avg":7.08},{"episode":68923,"avg":7.82},{"episode":69172,"avg":7.89},{"episode":69421,"avg":8.71},{"episode":69670,"avg":9.44},{"episode":69919,"avg":8.07},{"episode":70168,"avg":8.09},{"episode":70417,"avg":8.45},{"episode":70666,"avg":8.76},{"episode":70915,"avg":9.41},{"episode":71164,"avg":8.93},{"episode":71413,"avg":7.78},{"episode":71662,"avg":7.37},{"episode":71911,"avg":7.77},{"episode":72160,"avg":8.16},{"episode":72409,"avg":7.43},{"episode":72658,"avg":8.68},{"episode":72907,"avg":7.09},{"episode":73156,"avg":7.79},{"episode":73405,"avg":8.59},{"episode":73654,"avg":8.02},{"episode":73903,"avg":7.63},{"episode":74152,"avg":8.37},{"episode":74401,"avg":6.57},{"episode":74650,"avg":8.7},{"episode":74899,"avg":6.88},{"episode":75148,"avg":8.7},{"episode":75397,"avg":7.06},{"episode":75646,"avg":7.61},{"episode":75895,"avg":7.71},{"episode":76144,"avg":7.72},{"episode":76393,"avg":8.11},{"episode":76642,"avg":6.82},{"episode":76891,"avg":8.29},{"episode":77140,"avg":7.53},{"episode":77389,"avg":8.05},{"episode":77638,"avg":7.28},{"episode":77887,"avg":9.0},{"episode":78136,"avg":8.48},{"episode":78385,"avg":8.01},{"episode":78634,"avg":8.5},{"episode":78883,"avg":7.7},{"episode":79132,"avg":8.61},{"episode":79381,"avg":8.5},{"episode":79630,"avg":9.12},{"episode":79879,"avg":8.07},{"episode":80128,"avg":6.98},{"episode":80377,"avg":7.91},{"episode":80626,"avg":8.16},{"episode":80875,"avg":8.43},{"episode":81124,"avg":8.57},{"episode":81373,"avg":7.59},{"episode":81622,"avg":8.05},{"episode":81871,"avg":7.94},{"episode":82120,"avg":8.62},{"episode":82369,"avg":9.38},{"episode":82618,"avg":8.19},{"episode":82867,"avg":8.73},{"episode":83116,"avg":9.91},{"episode":83365,"avg":8.53},{"episode":83614,"avg":7.51},{"episode":83863,"avg":8.22},{"episode":84112,"avg":7.68},{"episode":84361,"avg":8.57},{"episode":84610,"avg":9.26},{"episode":84859,"avg":7.84},{"episode":85108,"avg":9.11},{"episode":85357,"avg":7.69},{"episode":85606,"avg":8.06},{"episode":85855,"avg":8.02},{"episode":86104,"avg":8.61},{"episode":86353,"avg":8.71},{"episode":86602,"avg":8.76},{"episode":86851,"avg":8.49},{"episode":87100,"avg":8.04},{"episode":87349,"avg":8.32},{"episode":87598,"avg":6.94},{"episode":87847,"avg":7.3},{"episode":88096,"avg":8.58},{"episode":88345,"avg":8.67},{"episode":88594,"avg":7.69},{"episode":88843,"avg":8.64},{"episode":89092,"avg":9.15},{"episode":89341,"avg":8.75},{"episode":89590,"avg":8.85},{"episode":89839,"avg":8.14},{"episode":90088,"avg":8.55},{"episode":90337,"avg":8.45},{"episode":90586,"avg":9.4},{"episode":90835,"avg":9.03},{"episode":91084,"avg":9.65},{"episode":91333,"avg":8.41},{"episode":91582,"avg":8.67},{"episode":91831,"avg":9.23},{"episode":92080,"avg":6.95},{"episode":92329,"avg":8.52},{"episode":92578,"avg":8.52},{"episode":92827,"avg":9.33},{"episode":93076,"avg":7.8},{"episode":93325,"avg":8.9},{"episode":93574,"avg":8.34},{"episode":93823,"avg":7.97},{"episode":94072,"avg":9.04},{"episode":94321,"avg":8.61},{"episode":94570,"avg":8.39},{"episode":94819,"avg":8.94},{"episode":95068,"avg":9.45},{"episode":95317,"avg":9.34},{"episode":95566,"avg":8.55},{"episode":95815,"avg":8.39},{"episode":96064,"avg":9.56},{"episode":96313,"avg":9.51},{"episode":96562,"avg":7.49},{"episode":96811,"avg":8.98},{"episode":97060,"avg":8.82},{"episode":97309,"avg":8.14},{"episode":97558,"avg":9.12},{"episode":97807,"avg":8.49},{"episode":98056,"avg":8.37},{"episode":98305,"avg":8.85},{"episode":98554,"avg":9.14},{"episode":98803,"avg":9.54},{"episode":99052,"avg":8.1},{"episode":99301,"avg":9.5},{"episode":99550,"avg":7.72},{"episode":99799,"avg":9.92},{"episode":99999,"avg":8.56}];
+  const optimalValue = 8.8889;
+  const randomValue = 6.558;
+
+  const svg = document.getElementById("chart");
+  const tooltip = document.getElementById("tooltip");
+  const wrap = svg.parentElement;
+  const NS = "http://www.w3.org/2000/svg";
+
+  const W = 860, H = 380;
+  const marginLeft = 42, marginRight = 16, marginTop = 16, marginBottom = 36;
+  const plotW = W - marginLeft - marginRight;
+  const plotH = H - marginTop - marginBottom;
+  const baselineY = marginTop + plotH;
+
+  const xMax = curve[curve.length - 1].episode;
+  const yMin = 4, yMax = 10.5;
+  const yTicks = [4, 5.5, 7, 8.5, 10];
+
+  function el(tag, attrs) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function xScale(ep) { return marginLeft + (ep / xMax) * plotW; }
+  function yScale(v) { return baselineY - ((v - yMin) / (yMax - yMin)) * plotH; }
+
+  yTicks.forEach((t) => {
+    const y = yScale(t);
+    svg.appendChild(el("line", { x1: marginLeft, x2: W - marginRight, y1: y, y2: y, class: "gridline" }));
+    const label = el("text", { x: marginLeft - 8, y: y + 4, class: "axis-label", "text-anchor": "end" });
+    label.textContent = t;
+    svg.appendChild(label);
+  });
+  svg.appendChild(el("line", { x1: marginLeft, x2: W - marginRight, y1: baselineY, y2: baselineY, class: "baseline" }));
+
+  [0, 25000, 50000, 75000, 100000].forEach((ep) => {
+    const x = xScale(ep);
+    const label = el("text", { x, y: baselineY + 20, class: "axis-label", "text-anchor": "middle" });
+    label.textContent = (ep / 1000) + "k";
+    svg.appendChild(label);
+  });
+
+  // reference lines
+  [
+    { value: optimalValue, color: "var(--ref-optimal)", text: `Optimal ${optimalValue.toFixed(2)}` },
+    { value: randomValue, color: "var(--ref-random)", text: `Zufall ${randomValue.toFixed(2)}` },
+  ].forEach((ref) => {
+    const y = yScale(ref.value);
+    svg.appendChild(el("line", { x1: marginLeft, x2: W - marginRight, y1: y, y2: y, class: "ref-line", stroke: ref.color }));
+    const label = el("text", { x: W - marginRight, y: y - 6, class: "ref-label", "text-anchor": "end", fill: "var(--ink-2)" });
+    label.textContent = ref.text;
+    svg.appendChild(label);
+  });
+
+  // area + line
+  const points = curve.map((d) => [xScale(d.episode), yScale(d.avg)]);
+  const linePath = "M " + points.map((p) => p.join(",")).join(" L ");
+  const areaPath = linePath + ` L ${points[points.length - 1][0]},${baselineY} L ${points[0][0]},${baselineY} Z`;
+
+  svg.appendChild(el("path", { d: areaPath, class: "curve-area" }));
+  svg.appendChild(el("path", { d: linePath, class: "curve-line" }));
+
+  const crosshair = el("line", { x1: 0, x2: 0, y1: marginTop, y2: baselineY, class: "crosshair" });
+  const hoverDot = el("circle", { r: 4.5, class: "hover-dot" });
+  svg.appendChild(crosshair);
+  svg.appendChild(hoverDot);
+
+  const hit = el("rect", { x: marginLeft, y: marginTop, width: plotW, height: plotH, class: "hit-rect" });
+  svg.appendChild(hit);
+
+  function nearestPoint(mouseX) {
+    const ep = ((mouseX - marginLeft) / plotW) * xMax;
+    let best = curve[0], bestDist = Infinity;
+    for (const d of curve) {
+      const dist = Math.abs(d.episode - ep);
+      if (dist < bestDist) { bestDist = dist; best = d; }
+    }
+    return best;
+  }
+
+  hit.addEventListener("mousemove", (evt) => {
+    const svgRect = svg.getBoundingClientRect();
+    const scaleX = W / svgRect.width;
+    const mouseX = (evt.clientX - svgRect.left) * scaleX;
+    const d = nearestPoint(mouseX);
+    const x = xScale(d.episode), y = yScale(d.avg);
+
+    crosshair.setAttribute("x1", x); crosshair.setAttribute("x2", x);
+    crosshair.style.opacity = 1;
+    hoverDot.setAttribute("cx", x); hoverDot.setAttribute("cy", y);
+    hoverDot.style.opacity = 1;
+
+    const wrapRect = wrap.getBoundingClientRect();
+    const scaleWrapX = wrapRect.width / W;
+    tooltip.innerHTML = `<b>Episode ${d.episode.toLocaleString("de-DE")}</b><br>Ø Reward (200): ${d.avg.toFixed(2)}`;
+    tooltip.style.left = (marginLeft + (x - marginLeft) * (wrapRect.width / W)) + "px";
+    tooltip.style.left = (x * scaleWrapX) + "px";
+    tooltip.style.top = (y * (wrapRect.height / H)) + "px";
+    tooltip.classList.add("visible");
+  });
+  hit.addEventListener("mouseleave", () => {
+    crosshair.style.opacity = 0;
+    hoverDot.style.opacity = 0;
+    tooltip.classList.remove("visible");
+  });
+})();
+</script>

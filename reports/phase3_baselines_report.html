@@ -1,0 +1,437 @@
+<meta charset="utf-8">
+<title>Take It Easy – Baseline-Agenten (Phase 3)</title>
+<style>
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --ink: #17160f;
+    --ink-2: #57544a;
+    --ink-muted: #8c8878;
+    --line: #e4e1d7;
+    --line-strong: #d6d2c4;
+    --random: #2a78d6;
+    --random-wash: rgba(42, 120, 214, 0.10);
+    --greedy: #eb6834;
+    --greedy-wash: rgba(235, 104, 52, 0.10);
+    --shadow: 0 1px 2px rgba(23, 22, 15, 0.04), 0 8px 24px rgba(23, 22, 15, 0.05);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      --bg: #14130f;
+      --surface: #1c1b16;
+      --ink: #f5f3ec;
+      --ink-2: #c7c3b5;
+      --ink-muted: #8c8878;
+      --line: #322f26;
+      --line-strong: #3d392c;
+      --random: #3987e5;
+      --random-wash: rgba(57, 135, 229, 0.14);
+      --greedy: #d95926;
+      --greedy-wash: rgba(217, 89, 38, 0.14);
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14130f;
+    --surface: #1c1b16;
+    --ink: #f5f3ec;
+    --ink-2: #c7c3b5;
+    --ink-muted: #8c8878;
+    --line: #322f26;
+    --line-strong: #3d392c;
+    --random: #3987e5;
+    --random-wash: rgba(57, 135, 229, 0.14);
+    --greedy: #d95926;
+    --greedy-wash: rgba(217, 89, 38, 0.14);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.35);
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --ink: #17160f;
+    --ink-2: #57544a;
+    --ink-muted: #8c8878;
+    --line: #e4e1d7;
+    --line-strong: #d6d2c4;
+    --random: #2a78d6;
+    --random-wash: rgba(42, 120, 214, 0.10);
+    --greedy: #eb6834;
+    --greedy-wash: rgba(235, 104, 52, 0.10);
+    --shadow: 0 1px 2px rgba(23, 22, 15, 0.04), 0 8px 24px rgba(23, 22, 15, 0.05);
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 56px 24px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .eyebrow .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--greedy); }
+
+  h1 {
+    font-size: 30px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    margin: 10px 0 0;
+    text-wrap: balance;
+  }
+  .lede {
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--ink-2);
+    max-width: 62ch;
+    margin: 14px 0 0;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  section { display: flex; flex-direction: column; gap: 16px; }
+  h2 {
+    font-size: 13px;
+    font-weight: 650;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin: 0;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 24px 24px 20px;
+  }
+
+  /* legend */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .swatch.random { background: var(--random); }
+  .swatch.greedy { background: var(--greedy); }
+  .legend-note {
+    font-size: 12px;
+    color: var(--ink-muted);
+    margin-left: auto;
+  }
+
+  .chart-wrap { position: relative; }
+  svg#chart { width: 100%; height: auto; display: block; overflow: visible; }
+  .axis-label { fill: var(--ink-muted); font-size: 11px; font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; }
+  .gridline { stroke: var(--line); stroke-width: 1; }
+  .baseline { stroke: var(--line-strong); stroke-width: 1; }
+  .bar-random { fill: var(--random); cursor: default; }
+  .bar-greedy { fill: var(--greedy); cursor: default; }
+  .bar-hit { fill: transparent; cursor: crosshair; }
+  .mean-line { stroke-dasharray: 3 3; stroke-width: 1.5; opacity: 0.85; }
+  .mean-caret { cursor: default; }
+
+  .tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--ink);
+    color: var(--bg);
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 8px 10px;
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    transform: translate(-50%, calc(-100% - 10px));
+    transition: opacity 0.1s ease;
+    white-space: nowrap;
+    z-index: 10;
+    font-variant-numeric: tabular-nums;
+  }
+  .tooltip.visible { opacity: 1; }
+  .tooltip b { font-weight: 650; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: right;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--line);
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+  }
+  th:first-child, td:first-child {
+    text-align: left;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  thead th {
+    color: var(--ink-muted);
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.agent { display: flex; align-items: center; gap: 8px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-weight: 550; }
+
+  p { font-size: 15px; line-height: 1.7; color: var(--ink-2); margin: 0; }
+  p + p { margin-top: 12px; }
+  .callout {
+    border-left: 2px solid var(--greedy);
+    padding: 2px 0 2px 16px;
+  }
+  .next {
+    font-size: 13px;
+    color: var(--ink-muted);
+    border-top: 1px solid var(--line);
+    padding-top: 20px;
+  }
+  .next b { color: var(--ink-2); }
+
+  code {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+    font-size: 0.9em;
+    background: var(--random-wash);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+</style>
+
+<div class="page">
+  <header>
+    <div class="eyebrow"><span class="dot"></span>Take It Easy · RL-Lernprojekt · Phase 3</div>
+    <h1>Baseline-Agenten: was schafft man ohne zu lernen?</h1>
+    <p class="lede">
+      Bevor ein RL-Agent trainiert wird, braucht es einen Maßstab. Zwei einfache
+      Agenten – <strong>reiner Zufall</strong> und eine <strong>Greedy-Heuristik</strong>
+      – haben je <strong>1.000 Partien</strong> Take It Easy gespielt. Die Grafik zeigt,
+      wie ihre Endscores verteilt sind.
+    </p>
+  </header>
+
+  <section>
+    <h2>Score-Verteilung über 1.000 Episoden</h2>
+    <div class="card">
+      <div class="legend">
+        <span class="legend-item"><span class="swatch random"></span>Random Agent</span>
+        <span class="legend-item"><span class="swatch greedy"></span>Greedy-Heuristik</span>
+        <span class="legend-note">▾ = Mittelwert · Balken zeigen Anzahl Partien je Score-Bereich</span>
+      </div>
+      <div class="chart-wrap">
+        <svg id="chart" viewBox="0 0 820 400" role="img" aria-label="Histogramm der Endscores von Random Agent und Greedy-Heuristik über je 1000 Episoden"></svg>
+        <div class="tooltip" id="tooltip"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Kennzahlen</h2>
+    <div class="card">
+      <table>
+        <thead>
+          <tr><th>Agent</th><th>Mittelwert</th><th>Std.-Abw.</th><th>Min</th><th>Max</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="agent"><span class="swatch random"></span>Random Agent</td>
+            <td>10,36</td><td>14,36</td><td>0</td><td>79</td>
+          </tr>
+          <tr>
+            <td class="agent"><span class="swatch greedy"></span>Greedy-Heuristik</td>
+            <td>27,73</td><td>22,52</td><td>0</td><td>128</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Einordnung</h2>
+    <p>
+      Der <b>Random Agent</b> legt jede Kachel auf ein zufälliges freies Feld. Die
+      Verteilung ist entsprechend links-steil: in <b>62&nbsp;%</b> aller Partien
+      entstehen weniger als 10 Punkte, weil kaum eine Linie zufällig durchgängig
+      gleiche Werte bekommt. Das ist die untere Grenze – schlechter geht es kaum.
+    </p>
+    <p>
+      Die <b>Greedy-Heuristik</b> legt jede Kachel dort ab, wo der Score direkt danach
+      am höchsten ist (<code>score_board()</code> nach dem Zug, maximiert). Das
+      verschiebt die Verteilung sichtbar nach rechts und mehr als verdoppelt den
+      Mittelwert – aber die Heuristik denkt nur einen Zug voraus, nicht mehrere. Sie
+      blockiert früh Felder, die später für eine lange Linie gebraucht worden wären.
+    </p>
+    <div class="callout">
+      <p>
+        Beide Agenten bleiben weit unter menschlichem Niveau (ca. 150–170 Punkte)
+        und dem theoretischen Maximum von 307. Genau diese Lücke – <b>langfristig
+        planen statt nur den nächsten Zug zu bewerten</b> – ist das Problem, das
+        Reinforcement Learning in den nächsten Phasen lösen soll.
+      </p>
+    </div>
+  </section>
+
+  <p class="next">
+    <b>Nächster Schritt:</b> Phase 4 – Tabular Q-Learning auf einem verkleinerten
+    Mini-Board, um die Update-Regel von Hand nachzuvollziehen, bevor es mit Deep RL
+    auf dem vollen 19-Felder-Board weitergeht.
+  </p>
+</div>
+
+<script>
+(function () {
+  const edges = [0,10,20,30,40,50,60,70,80,90,100,110,120,130];
+  const random = { counts: [621,136,144,51,23,17,6,2,0,0,0,0,0], mean: 10.361, color: "var(--random)", cls: "bar-random", label: "Random Agent" };
+  const greedy = { counts: [266,136,178,141,110,87,31,22,18,5,3,2,1], mean: 27.733, color: "var(--greedy)", cls: "bar-greedy", label: "Greedy-Heuristik" };
+
+  const svg = document.getElementById("chart");
+  const tooltip = document.getElementById("tooltip");
+  const wrap = svg.parentElement;
+  const NS = "http://www.w3.org/2000/svg";
+
+  const W = 820, H = 400;
+  const marginLeft = 46, marginRight = 12, marginTop = 34, marginBottom = 44;
+  const plotW = W - marginLeft - marginRight;
+  const plotH = H - marginTop - marginBottom;
+  const baselineY = marginTop + plotH;
+
+  const maxCount = 650; // clean ceiling above the tallest bar (621)
+  const yTicks = [0, 150, 300, 450, 600];
+
+  function el(tag, attrs) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  // gridlines + y labels
+  yTicks.forEach((t) => {
+    const y = baselineY - (t / maxCount) * plotH;
+    svg.appendChild(el("line", { x1: marginLeft, x2: W - marginRight, y1: y, y2: y, class: t === 0 ? "baseline" : "gridline" }));
+    const label = el("text", { x: marginLeft - 10, y: y + 4, class: "axis-label", "text-anchor": "end" });
+    label.textContent = t;
+    svg.appendChild(label);
+  });
+
+  const nBins = edges.length;
+  const slotW = plotW / nBins;
+  const barW = Math.min(22, slotW * 0.36);
+  const gap = 2;
+
+  function xScale(value) {
+    return marginLeft + (value / 130) * plotW;
+  }
+
+  function roundedTopBarPath(x, yTop, w, h, r) {
+    const rr = Math.max(0, Math.min(r, h, w / 2));
+    const yBase = baselineY;
+    if (h <= 0) return "";
+    return `M ${x} ${yBase}
+            L ${x} ${yTop + rr}
+            Q ${x} ${yTop} ${x + rr} ${yTop}
+            L ${x + w - rr} ${yTop}
+            Q ${x + w} ${yTop} ${x + w} ${yTop + rr}
+            L ${x + w} ${yBase}
+            Z`;
+  }
+
+  function showTooltip(evt, html) {
+    const rect = wrap.getBoundingClientRect();
+    tooltip.innerHTML = html;
+    tooltip.style.left = (evt.clientX - rect.left) + "px";
+    tooltip.style.top = (evt.clientY - rect.top) + "px";
+    tooltip.classList.add("visible");
+  }
+  function hideTooltip() { tooltip.classList.remove("visible"); }
+
+  for (let i = 0; i < nBins; i++) {
+    const slotX = marginLeft + i * slotW;
+    const groupW = barW * 2 + gap;
+    const groupX = slotX + (slotW - groupW) / 2;
+
+    [random, greedy].forEach((series, si) => {
+      const count = series.counts[i];
+      const barH = (count / maxCount) * plotH;
+      const x = groupX + si * (barW + gap);
+      const yTop = baselineY - barH;
+
+      if (count > 0) {
+        const path = el("path", { d: roundedTopBarPath(x, yTop, barW, barH, 4), class: series.cls });
+        svg.appendChild(path);
+      }
+
+      // generous invisible hit area down to baseline, full slot half-width
+      const hit = el("rect", {
+        x: groupX + si * (groupW / 2), y: marginTop,
+        width: groupW / 2, height: plotH,
+        class: "bar-hit"
+      });
+      const from = edges[i], to = i < nBins - 1 ? edges[i + 1] : 140;
+      hit.addEventListener("mousemove", (evt) => {
+        showTooltip(evt, `<b>${series.label}</b><br>${from}–${to} Punkte<br>${count} von 1.000 Partien`);
+      });
+      hit.addEventListener("mouseleave", hideTooltip);
+      svg.appendChild(hit);
+    });
+
+    // x-axis bin labels (every other bin to avoid crowding)
+    if (i % 2 === 0) {
+      const label = el("text", { x: slotX + slotW / 2, y: baselineY + 18, class: "axis-label", "text-anchor": "middle" });
+      label.textContent = edges[i];
+      svg.appendChild(label);
+    }
+  }
+  const axisEndLabel = el("text", { x: W - marginRight, y: baselineY + 18, class: "axis-label", "text-anchor": "end" });
+  axisEndLabel.textContent = "130+";
+  svg.appendChild(axisEndLabel);
+
+  // mean markers
+  [random, greedy].forEach((series) => {
+    const x = xScale(series.mean);
+    svg.appendChild(el("line", { x1: x, x2: x, y1: marginTop, y2: baselineY, class: "mean-line", stroke: series.color }));
+    const caret = el("path", {
+      d: `M ${x - 5} ${marginTop - 10} L ${x + 5} ${marginTop - 10} L ${x} ${marginTop - 2} Z`,
+      fill: series.color, class: "mean-caret"
+    });
+    caret.addEventListener("mousemove", (evt) => {
+      showTooltip(evt, `<b>${series.label} · Mittelwert</b><br>${series.mean.toFixed(2)} Punkte`);
+    });
+    caret.addEventListener("mouseleave", hideTooltip);
+    svg.appendChild(caret);
+  });
+})();
+</script>

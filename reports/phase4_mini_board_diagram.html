@@ -1,0 +1,176 @@
+<meta charset="utf-8">
+<title>Mini-Board Take It Easy</title>
+<style>
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --ink: #17160f;
+    --ink-2: #57544a;
+    --ink-muted: #8c8878;
+    --line: #e4e1d7;
+    --line-strong: #d6d2c4;
+    --accent: #2a78d6;
+    --accent-wash: rgba(42, 120, 214, 0.10);
+    --tile-1: #9ec5f4; --tile-1-text: #17160f;
+    --tile-5: #2a78d6; --tile-5-text: #fcfcfb;
+    --tile-9: #0d366b; --tile-9-text: #fcfcfb;
+    --shadow: 0 1px 2px rgba(23, 22, 15, 0.04), 0 8px 24px rgba(23, 22, 15, 0.05);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      --bg: #14130f; --surface: #1c1b16; --ink: #f5f3ec; --ink-2: #c7c3b5;
+      --ink-muted: #8c8878; --line: #322f26; --line-strong: #3d392c;
+      --accent: #3987e5; --accent-wash: rgba(57, 135, 229, 0.14);
+      --tile-1: #6da7ec; --tile-1-text: #14130f;
+      --tile-5: #3987e5; --tile-5-text: #fcfcfb;
+      --tile-9: #184f95; --tile-9-text: #fcfcfb;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14130f; --surface: #1c1b16; --ink: #f5f3ec; --ink-2: #c7c3b5;
+    --ink-muted: #8c8878; --line: #322f26; --line-strong: #3d392c;
+    --accent: #3987e5; --accent-wash: rgba(57, 135, 229, 0.14);
+    --tile-1: #6da7ec; --tile-1-text: #14130f;
+    --tile-5: #3987e5; --tile-5-text: #fcfcfb;
+    --tile-9: #184f95; --tile-9-text: #fcfcfb;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.35);
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: #f7f6f2; --surface: #ffffff; --ink: #17160f; --ink-2: #57544a;
+    --ink-muted: #8c8878; --line: #e4e1d7; --line-strong: #d6d2c4;
+    --accent: #2a78d6; --accent-wash: rgba(42, 120, 214, 0.10);
+    --tile-1: #9ec5f4; --tile-1-text: #17160f;
+    --tile-5: #2a78d6; --tile-5-text: #fcfcfb;
+    --tile-9: #0d366b; --tile-9-text: #fcfcfb;
+    --shadow: 0 1px 2px rgba(23, 22, 15, 0.04), 0 8px 24px rgba(23, 22, 15, 0.05);
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 760px; margin: 0 auto; padding: 56px 24px 80px; display: flex; flex-direction: column; gap: 28px; }
+
+  .eyebrow {
+    font-size: 12px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-muted); display: flex; align-items: center; gap: 8px;
+  }
+  .eyebrow .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+  h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.3; margin: 10px 0 0; text-wrap: balance; }
+  .lede { font-size: 15.5px; line-height: 1.65; color: var(--ink-2); max-width: 64ch; margin: 12px 0 0; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+  code { font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; font-size: 0.92em; background: var(--accent-wash); padding: 1px 5px; border-radius: 4px; }
+
+  figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 8px; }
+  svg#diagram { width: 100%; height: auto; display: block; }
+  svg#diagram text { fill: currentColor; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .panel-title { font-size: 13px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; fill: var(--ink-muted); }
+  .cell-empty { fill: var(--surface); stroke: var(--line-strong); stroke-width: 2; }
+  .cell-hub { fill: var(--accent-wash); stroke: var(--accent); stroke-width: 2.5; }
+  .cell-label { font-size: 20px; font-weight: 650; text-anchor: middle; dominant-baseline: central; }
+  .line-edge { stroke: var(--ink-muted); stroke-width: 2; }
+  .line-label-bg { fill: var(--surface); }
+  .line-label { font-size: 12px; text-anchor: middle; dominant-baseline: central; fill: var(--ink-2); font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; }
+  .callout-text { font-size: 12px; text-anchor: middle; fill: var(--accent); font-weight: 600; }
+  .callout-line { stroke: var(--accent); stroke-width: 1.5; fill: none; }
+  .tile-label { font-size: 22px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .tile-caption { font-size: 12px; text-anchor: middle; fill: var(--ink-muted); font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; }
+  .flow-arrow { stroke: var(--ink-muted); stroke-width: 1.5; fill: none; stroke-dasharray: 4 3; }
+  .flow-label { font-size: 11.5px; fill: var(--ink-muted); }
+
+  figcaption { padding: 14px 10px 6px; font-size: 13px; line-height: 1.6; color: var(--ink-muted); }
+  figcaption b { color: var(--ink-2); }
+
+  .formula { margin: 0; font-size: 14.5px; line-height: 1.7; color: var(--ink-2); }
+</style>
+
+<div class="page">
+  <header>
+    <div class="eyebrow"><span class="dot"></span>Take It Easy · Phase 4 · Mini-Board</div>
+    <h1>Das reduzierte Feld und die 3 möglichen Kacheln</h1>
+    <p class="lede">
+      Statt 19 Feldern und 27 Kacheln mit je 3 Werten: <strong>3 Felder</strong>
+      in Y-Form und Kacheln mit <strong>nur einem Wert</strong>. Feld A ist der
+      Grund, warum das trotzdem eine echte Entscheidung bleibt – es gehört zu
+      beiden Linien, B und C nur zu je einer.
+    </p>
+  </header>
+
+  <figure>
+    <svg id="diagram" viewBox="0 0 720 440" role="img" aria-label="Diagramm: Mini-Board in Y-Form mit Zentrum A, das zu zwei Linien gehört (A-B und A-C), und den drei möglichen Kacheln mit den Werten 1, 5 und 9, die zufällig gezogen und auf ein freies Feld gelegt werden.">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ink-muted)"></path>
+        </marker>
+      </defs>
+
+      <text x="170" y="30" class="panel-title" text-anchor="middle">Das Mini-Board</text>
+      <text x="555" y="30" class="panel-title" text-anchor="middle">3 mögliche Kacheln</text>
+
+      <!-- edges (drawn first so hexagons cover the stub ends) -->
+      <line x1="170" y1="120" x2="80" y2="285" class="line-edge"></line>
+      <line x1="170" y1="120" x2="260" y2="285" class="line-edge"></line>
+
+      <!-- edge labels with halo background -->
+      <rect x="70" y="188" width="90" height="20" rx="4" class="line-label-bg"></rect>
+      <text x="115" y="198" class="line-label">Linie A–B · Länge 2</text>
+
+      <rect x="185" y="188" width="90" height="20" rx="4" class="line-label-bg"></rect>
+      <text x="230" y="198" class="line-label">Linie A–C · Länge 2</text>
+
+      <!-- callout for A -->
+      <path d="M 170 58 L 170 82" class="callout-line" marker-end="url(#arrow)"></path>
+      <text x="170" y="50" class="callout-text">gehört zu 2 Linien</text>
+
+      <!-- cell A (hub) -->
+      <polygon points="170,86 198,102 198,134 170,150 142,134 142,102" class="cell-hub"></polygon>
+      <text x="170" y="118" class="cell-label">A</text>
+
+      <!-- cell B -->
+      <polygon points="80,251 108,267 108,299 80,315 52,299 52,267" class="cell-empty"></polygon>
+      <text x="80" y="283" class="cell-label">B</text>
+
+      <!-- cell C -->
+      <polygon points="260,251 288,267 288,299 260,315 232,299 232,267" class="cell-empty"></polygon>
+      <text x="260" y="283" class="cell-label">C</text>
+
+      <!-- tiles -->
+      <polygon points="560,80 588,96 588,128 560,144 532,128 532,96" fill="var(--tile-1)"></polygon>
+      <text x="560" y="112" class="tile-label" fill="var(--tile-1-text)">1</text>
+      <text x="560" y="164" class="tile-caption">Wert 1</text>
+
+      <polygon points="560,190 588,206 588,238 560,254 532,238 532,206" fill="var(--tile-5)"></polygon>
+      <text x="560" y="222" class="tile-label" fill="var(--tile-5-text)">5</text>
+      <text x="560" y="274" class="tile-caption">Wert 5</text>
+
+      <polygon points="560,300 588,316 588,348 560,364 532,348 532,316" fill="var(--tile-9)"></polygon>
+      <text x="560" y="332" class="tile-label" fill="var(--tile-9-text)">9</text>
+      <text x="560" y="384" class="tile-caption">Wert 9</text>
+
+      <!-- flow from tiles to board -->
+      <path d="M 520 220 C 440 220, 340 190, 275 168" class="flow-arrow" marker-end="url(#arrow)"></path>
+      <text x="410" y="188" class="flow-label" text-anchor="middle">zufällig gezogen (gleichverteilt, mit Zurücklegen)</text>
+      <text x="410" y="240" class="flow-label" text-anchor="middle">→ auf ein freies Feld gelegt</text>
+    </svg>
+    <figcaption>
+      <b>A</b> zählt für beide Linien gleichzeitig – eine frühe Kachel dort hält
+      beide offen, verlangt aber später zwei Treffer. <b>B</b> und <b>C</b>
+      gehören nur zu je einer Linie: sicherer, aber von vornherein auf eine
+      Linie begrenzt. Genau dieser Unterschied macht "wohin lege ich die erste
+      Kachel?" zu einer echten Entscheidung statt einer Formsache.
+    </figcaption>
+  </figure>
+
+  <p class="formula">
+    <b>Scoring</b> (gleiches Prinzip wie im Original, nur auf 2 Linien reduziert):<br>
+    <code>score = 2 × Wert(A), falls A = B　　+　　2 × Wert(A), falls A = C</code><br>
+    Maximum: alle drei Felder auf 9 → <code>2×9 + 2×9 = 36</code>.
+  </p>
+</div>
