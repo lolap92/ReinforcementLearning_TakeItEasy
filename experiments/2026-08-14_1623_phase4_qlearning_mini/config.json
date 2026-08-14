@@ -1,0 +1,19 @@
+{
+  "run_id": "2026-08-14_1623_phase4_qlearning_mini",
+  "tag": "phase4_qlearning_mini",
+  "timestamp": "2026-08-14T16:23:18+00:00",
+  "git_commit": "86b02ea",
+  "env": "MiniTakeItEasyEnv",
+  "algorithm": "tabular_q_learning",
+  "hyperparameters": {
+    "episodes": 100000,
+    "alpha": 0.1,
+    "gamma": 1.0,
+    "eps_start": 1.0,
+    "eps_end": 0.05
+  },
+  "eval_episodes": 1000,
+  "master_seed": 0,
+  "policy_match_rate_vs_optimal": 0.9369369369369369,
+  "policy_match_rate_vs_optimal_visit_weighted": 0.84029
+}
