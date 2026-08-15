@@ -197,6 +197,43 @@
   </section>
 
   <section>
+    <h2>Durchschnitt (8,89) vs. Maximum (36) – zwei verschiedene Fragen</h2>
+    <div class="card">
+      <p style="margin-bottom:16px">
+        8,89 ist der <b>Erwartungswert</b>: der Durchschnitt über <i>alle</i>
+        möglichen Kachel-Ziehungen bei optimalem Spiel. 36 ist die
+        <b>bestmögliche einzelne Episode</b> (alle drei Felder auf 9). Beides
+        stimmt gleichzeitig – es sind unterschiedliche Fragen ("was bekomme
+        ich im Schnitt?" vs. "was ist die beste denkbare Partie?"). Die
+        exakte Verteilung (alle 27 gleichwahrscheinlichen Kachel-Sequenzen,
+        optimal durchgespielt) macht das sichtbar:
+      </p>
+      <table>
+        <thead><tr><th>Score</th><th>Wahrscheinlichkeit</th></tr></thead>
+        <tbody>
+          <tr><td class="agent">0</td><td>22,2 %</td></tr>
+          <tr><td class="agent">2</td><td>22,2 %</td></tr>
+          <tr><td class="agent">4</td><td>3,7 %</td></tr>
+          <tr><td class="agent">10</td><td>22,2 %</td></tr>
+          <tr><td class="agent">18</td><td>22,2 %</td></tr>
+          <tr><td class="agent">20</td><td>3,7 %</td></tr>
+          <tr><td class="agent">36</td><td>3,7 %</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:16px">
+        Die 36 kommt nur zustande, wenn alle drei gezogenen Kacheln zufällig
+        die 9 sind – bei unabhängigen Ziehungen aus 3 gleichwahrscheinlichen
+        Werten ist das (1/3)³ = 1/27 ≈ 3,7&nbsp;% der Fälle. In über 40&nbsp;%
+        der Partien (Score 0 oder 2) matcht dagegen so gut wie gar nichts,
+        selbst bei optimalem Spiel – man steuert ja nicht, welche Werte
+        gezogen werden, nur wie man sie platziert. Der Erwartungswert ist
+        genau die wahrscheinlichkeitsgewichtete Summe dieser Zeilen:
+        <code>0·0,222 + 2·0,222 + 4·0,037 + 10·0,222 + 18·0,222 + 20·0,037 + 36·0,037 = 8,8889</code>.
+      </p>
+    </div>
+  </section>
+
+  <section>
     <h2>Ein Umweg, der zeigt, wie Q-Learning tickt</h2>
     <div class="card">
       <div class="callout">
