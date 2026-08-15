@@ -252,12 +252,34 @@
       <p style="margin-top:16px">
         Das zeigt auch, warum die einfache Kennzahl "stimmt die gelernte
         Aktion mit dem Optimum überein?" allein irreführend sein kann: über
-        alle 111 möglichen Zustände lag die Trefferquote bei 93,7&nbsp;%, aber
-        <b>besuchsgewichtet</b> (wie oft die Entscheidung in der Praxis
-        tatsächlich vorkommt) nur bei 84,0&nbsp;% – weil der falsch gelernte
-        Start-Zustand in <i>jeder einzigen Episode</i> auftritt, ein Fehler in
-        einem seltenen Randzustand aber kaum ins Gewicht fällt.
+        alle 111 möglichen Zustände lag die Trefferquote (bei 100.000
+        Episoden) zunächst bei 93,7&nbsp;%, aber <b>besuchsgewichtet</b> (wie
+        oft die Entscheidung in der Praxis tatsächlich vorkommt) nur bei
+        84,0&nbsp;%.
       </p>
+      <div class="callout" style="margin-top:16px">
+        <p>
+          Ursache war ein zweiter, unabhängiger Effekt: bei Gleichstand
+          zwischen mehreren Q-Werten wählte <code>max(valid, key=...)</code>
+          in Python immer die <i>erste</i> gleich gute Option (Feld A vor B
+          vor C). Zu Beginn des Trainings sind fast alle Werte noch 0 – ein
+          perfekter Gleichstand. Das verschafft B einen winzigen
+          systematischen Vorsprung vor C (strukturell aber exakt
+          gleichwertig!), der sich selbst verstärkt: wird B einmal knapp
+          bevorzugt, wird es öfter gewählt, sein Wert verbessert sich
+          schneller, und C bleibt zurück. <b>Fix:</b> bei Gleichstand
+          zufällig statt immer die erste Option wählen
+          (<code>argmax_random_tiebreak()</code> in <code>qlearning.py</code>).
+          Ergebnis: Trefferquote jetzt <b>100&nbsp;% / 100&nbsp;%</b>, sowohl
+          roh als auch besuchsgewichtet. Der Start-Zustand selbst (Trace
+          unten) blieb dabei unverändert – er wird so oft besucht, dass
+          zufällige Exploration die Q-Werte längst auseinandergezogen hatte,
+          bevor Gleichstände überhaupt zur greedy-Entscheidung wurden. Der
+          Fix hat vor allem seltener besuchte Zustände betroffen, die einzeln
+          kaum aus der Kurve oben herauszulesen sind, aber in Summe die
+          Trefferquote verzerrt hatten.
+        </p>
+      </div>
     </div>
   </section>
 

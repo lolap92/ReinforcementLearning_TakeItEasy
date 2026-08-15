@@ -42,7 +42,7 @@ from pathlib import Path
 import numpy as np
 
 from mini_env import MiniTakeItEasyEnv, CELLS, VALUES
-from mini_optimal import expected_optimal_score, optimal_action
+from mini_optimal import expected_optimal_score, optimal_action_values
 
 REPO_ROOT = Path(__file__).resolve().parent
 EXPERIMENTS_DIR = REPO_ROOT / "experiments"
@@ -54,12 +54,24 @@ def valid_actions_from_state(state):
     return [i for i, v in enumerate((a, b, c)) if v == 0]
 
 
+def argmax_random_tiebreak(valid, q_values, rng):
+    """max(valid, key=...) würde bei Gleichstand immer die erste Option
+    (kleinster Index, also A vor B vor C) bevorzugen. Gerade am Anfang des
+    Trainings, wenn fast alle Q-Werte noch 0 sind, entsteht daraus ein
+    systematischer Vorteil für frühe Aktionen, der sich selbst verstärkt
+    (siehe Report) - obwohl B und C strukturell gleichwertig sind. Hier wird
+    bei Gleichstand stattdessen zufällig unter den bestplatzierten Aktionen
+    gewählt."""
+    best_value = max(q_values[a] for a in valid)
+    best_actions = [a for a in valid if q_values[a] == best_value]
+    return int(rng.choice(best_actions))
+
+
 def epsilon_greedy(q_table, state, epsilon, rng):
     valid = valid_actions_from_state(state)
     if rng.random() < epsilon:
         return int(rng.choice(valid))
-    q_values = q_table[state]
-    return max(valid, key=lambda a: q_values[a])
+    return argmax_random_tiebreak(valid, q_table[state], rng)
 
 
 def train(episodes, alpha, gamma, eps_start, eps_end, seed):
@@ -108,8 +120,7 @@ def evaluate_policy(q_table, n_episodes, seed):
         total = 0.0
         while not terminated:
             valid = valid_actions_from_state(state)
-            q_values = q_table[state]
-            action = max(valid, key=lambda a: q_values[a])
+            action = argmax_random_tiebreak(valid, q_table[state], rng)
             state, reward, terminated = env.step(action)
             total += reward
         scores[i] = total
@@ -140,6 +151,7 @@ def print_manual_trace(q_table, alpha, gamma, seed):
     print("Manuelle Nachvollziehbarkeit: eine Beispiel-Episode, Schritt für Schritt")
     print("=" * 78)
     env = MiniTakeItEasyEnv()
+    tie_rng = np.random.default_rng(seed)
     state = env.reset(seed=seed)
     terminated = False
     step_num = 0
@@ -148,7 +160,7 @@ def print_manual_trace(q_table, alpha, gamma, seed):
         step_num += 1
         valid = valid_actions_from_state(state)
         q_values = q_table[state].copy()
-        action = max(valid, key=lambda a: q_values[a])
+        action = argmax_random_tiebreak(valid, q_values, tie_rng)
         cell = CELLS[action]
 
         print(f"\n--- Zug {step_num} ---")
@@ -224,14 +236,20 @@ if __name__ == "__main__":
     print(f"Q-Learning (gelernt):   mean={eval_scores.mean():.3f}  std={eval_scores.std():.3f}")
     print(f"Optimal (exakt, DP):    mean={optimal_mean:.4f}")
 
+    match_rng = np.random.default_rng(args.seed + 12345)
     matches, total = 0, 0
     weighted_matches, weighted_total = 0, 0
     for state, q_values in q_table.items():
         a, b, c, tile = state
         valid = valid_actions_from_state(state)
-        learned_action = max(valid, key=lambda act: q_values[act])
-        opt_action, _ = optimal_action((a, b, c), tile)
-        is_match = int(learned_action == opt_action)
+        learned_action = argmax_random_tiebreak(valid, q_values, match_rng)
+        # Gegen ALLE optimalen Aktionen prüfen, nicht nur eine einzelne
+        # Referenzaktion - bei B/C ist Gleichstand die exakt richtige
+        # Antwort, kein Fehler, den man mit einem willkürlichen Tiebreak
+        # der Referenz bestrafen sollte.
+        opt_values = optimal_action_values((a, b, c), tile)
+        best_opt_value = max(opt_values.values())
+        is_match = int(abs(opt_values[learned_action] - best_opt_value) < 1e-9)
         total += 1
         matches += is_match
         visits = visit_counts.get(state, 0)

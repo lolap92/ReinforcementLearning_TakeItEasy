@@ -1,0 +1,26 @@
+[
+  {
+    "name": "random_mini",
+    "n_episodes": 1000,
+    "mean": 6.558,
+    "std": 8.939163048071112,
+    "min": 0.0,
+    "max": 36.0
+  },
+  {
+    "name": "qlearning_mini",
+    "n_episodes": 1000,
+    "mean": 8.81,
+    "std": 8.94583143145454,
+    "min": 0.0,
+    "max": 36.0
+  },
+  {
+    "name": "optimal_mini",
+    "n_episodes": null,
+    "mean": 8.888888888888891,
+    "std": 0.0,
+    "min": null,
+    "max": null
+  }
+]

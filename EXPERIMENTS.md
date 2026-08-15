@@ -9,3 +9,6 @@ Ein Lauf pro Zeile. Details (Config, Kennzahlen, Trajektorien) unter `experiment
 | 2026-08-14 | `2026-08-14_1623_phase4_qlearning_mini` | phase4_qlearning_mini | random_mini | 1000 | 6.56 | 8.94 | 0.0 | 36.0 | 86b02ea |
 | 2026-08-14 | `2026-08-14_1623_phase4_qlearning_mini` | phase4_qlearning_mini | qlearning_mini | 1000 | 8.81 | 8.95 | 0.0 | 36.0 | 86b02ea |
 | 2026-08-14 | `2026-08-14_1623_phase4_qlearning_mini` | phase4_qlearning_mini | optimal_mini | - | 8.89 | 0.00 | - | - | 86b02ea |
+| 2026-08-15 | `2026-08-15_0453_phase4_qlearning_mini` | phase4_qlearning_mini | random_mini | 1000 | 6.56 | 8.94 | 0.0 | 36.0 | b27139b |
+| 2026-08-15 | `2026-08-15_0453_phase4_qlearning_mini` | phase4_qlearning_mini | qlearning_mini | 1000 | 8.81 | 8.95 | 0.0 | 36.0 | b27139b |
+| 2026-08-15 | `2026-08-15_0453_phase4_qlearning_mini` | phase4_qlearning_mini | optimal_mini | - | 8.89 | 0.00 | - | - | b27139b |

@@ -42,6 +42,17 @@ def _action_value(board_dict, action, tile):
     return sum(optimal_value(new_board_tuple, t) for t in VALUES) / len(VALUES)
 
 
+def optimal_action_values(board, tile):
+    """Q*-Wert für JEDE gültige Aktion (nicht nur die beste) - damit lässt
+    sich prüfen, ob eine gelernte Aktion optimal ist, auch wenn mehrere
+    Aktionen exakt gleich gut sind (z.B. die beiden symmetrischen Arme B/C:
+    ein einzelner "bester" Referenzwert würde eine der beiden willkürlich
+    bevorzugen und einen fair auswürfelnden Agenten fälschlich bestrafen)."""
+    board_dict = dict(zip(CELLS, board))
+    valid = [i for i, c in enumerate(CELLS) if board_dict[c] == 0]
+    return {action: _action_value(board_dict, action, tile) for action in valid}
+
+
 def optimal_action(board, tile):
     """Bestes Feld (Action-Index) für `tile` im Zustand `board`, plus dessen Q-Wert."""
     board_dict = dict(zip(CELLS, board))
