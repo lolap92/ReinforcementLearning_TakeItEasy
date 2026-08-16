@@ -1,0 +1,11 @@
+[
+  {
+    "name": "dqn_full_board_masked",
+    "n_episodes": 1000,
+    "mean": 47.942,
+    "std": 19.29068780525982,
+    "min": 0.0,
+    "max": 138.0,
+    "avg_invalid_actions_per_episode": 0.0
+  }
+]
