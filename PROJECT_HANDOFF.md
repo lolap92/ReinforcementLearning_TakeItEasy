@@ -34,17 +34,20 @@ Fokus liegt auf dem **Verständnis der RL-Grundlagen** (nicht primär auf State-
 2. **✅ Environment bauen** (erledigt)
    Siehe Abschnitt "Bisheriger Stand" unten für Details
 
-3. **⏳ Baselines** (nächster Schritt – noch nicht begonnen)
-   Geplant: Random Agent + einfache Greedy-Heuristik als Referenzwerte, über viele Episoden gemittelt, um später RL-Ergebnisse einordnen zu können
+3. **✅ Baselines** (erledigt)
+   Random Agent (Ø 10.86) und Greedy-Heuristik (Ø 27.72), je 1000 Episoden, siehe `experiments/2026-08-07_2151_phase3_baselines/`
 
-4. **Tabular Q-Learning auf Mini-Board** (offen)
-   Kleines, künstlich verkleinertes Board, um die Q-Learning-Update-Regel von Hand nachzuvollziehen, bevor Deep RL eingesetzt wird
+4. **✅ Tabular Q-Learning auf Mini-Board** (erledigt)
+   Y-förmiges Mini-Board, Q-Learning (Ø 8.81) knapp über Random (Ø 6.56), nahe am errechneten Optimum (8.89) – siehe `experiments/2026-08-1[45]_*_phase4_qlearning_mini/`
 
-5. **DQN via Stable-Baselines3** (offen)
-   Erstes "echtes" Deep-RL-Training auf der vollen Environment, inkl. Action Masking
+5. **✅ DQN via Stable-Baselines3** (erledigt)
+   - Erster Lauf ohne Action Masking divergierte vollständig (Score 0 über 1000 Episoden trotz 1 Mio. Steps) – Ursache: ungültige Züge führen zu einem selbstreferentiellen Bellman-Update, verschärft durch `gamma=1.0`. Siehe `experiments/2026-08-16_0738_phase5_dqn/NOTES.md`.
+   - Mit Action Masking (eigene `MaskedDQN`/`MaskedQNetwork`, da SB3-DQN kein natives Masking hat) lief ein 300k-Steps-Lauf stabil und gut: Ø 47.94, deutlich über Greedy (`experiments/2026-08-16_1227_phase5_dqn_masked/`).
+   - Ein längerer 1-Mio-Steps-Lauf mit identischer Config fiel danach überraschend auf Ø 9.89 zurück (`experiments/2026-08-16_2030_phase5_dqn_masked/`) – **kein Masking-Problem** (0 ungültige Züge), sondern vermutlich klassische DQN-Instabilität durch späte Q-Value-Überschätzung (kein Double-DQN, `gamma=1.0`, `buffer_size=100k` verdrängt bei 1M Steps alte gute Erfahrung). Lehre: das *Endmodell* nach N Steps ist bei DQN kein verlässlicher Indikator, das beste Zwischen-Checkpoint schon eher.
+   - `train_dqn.py` wertet seitdem zusätzlich automatisch das von `EvalCallback` gespeicherte beste Zwischen-Checkpoint aus (`*_best_checkpoint` in `summary.json`/`EXPERIMENTS.md`), loggt den Spiel-Score explizit als eigenes TensorBoard-Tag (`rollout/score_mean`, klarer als der SB3-Standard `ep_rew_mean`) und unterstützt `--device cuda|cpu|auto` zur expliziten GPU-Wahl.
 
-6. **PPO / MaskablePPO via SB3** (offen)
-   Vergleich Value-based (DQN) vs. Policy-based (PPO), Lernkurven-Vergleich via TensorBoard
+6. **⏳ PPO / MaskablePPO via SB3** (nächster Schritt – Skript steht, noch nicht lokal trainiert)
+   `train_ppo.py` ist fertig (analog zu `train_dqn.py`: gleiches Environment, gleiches Netz `[128,128]`, `gamma=1.0`, gleiche Auswertungsmethodik, inkl. Best-Checkpoint-Auswertung). Anders als bei DQN übernimmt `sb3-contrib`s `ActionMasker`/`MaskablePPO` das Masking nativ, kein eigener Policy-Hack nötig. Zu prüfen: ob Policy-based RL hier stabiler über lange Trainingsläufe ist als das DQN-Ergebnis aus Phase 5. Empfehlung: erst 300k Steps laufen lassen und mit dem 300k-DQN-Ergebnis (Ø 47.94) vergleichen, danach ggf. 1 Mio. Steps wiederholen, um gezielt auf das gleiche Instabilitätsmuster wie bei DQN zu prüfen.
 
 7. **Evaluation** (offen)
    Viele Testepisoden je Agent, Score-Verteilungen vs. Baselines aus Phase 3 vergleichen
@@ -100,7 +103,8 @@ python env.py    # sollte Board-Render + Random-Agent-Score ausgeben
 
 ## Nächster Schritt
 
-**Phase 3: Baselines implementieren**
-- Random Agent (zufällige gültige Aktion) – Kernlogik existiert bereits als Testcode in `env.py`, sollte aber als eigenständiger, wiederverwendbarer Agent ausgelagert werden
-- Einfache Greedy-Heuristik (z.B. Kachel auf das Feld legen, das den größten sofortigen Score-Zuwachs oder die beste Line-Fortsetzung verspricht)
-- Beide Agenten über viele Episoden (z.B. 1000+) laufen lassen, Score-Verteilung (Mittelwert, Std, Min/Max) als Referenz für spätere RL-Agenten festhalten
+**Phase 6: MaskablePPO trainieren**
+- `train_ppo.py` ist vorbereitet (siehe Phase 6 oben), aber noch nicht lokal trainiert
+- Lokal ausführen: `python train_ppo.py --timesteps 300000`, danach `config.json`/`summary.json`/`EXPERIMENTS.md`-Zeile committen (wie bei den DQN-Läufen)
+- Vergleich gegen DQN Phase 5: 300k-PPO vs. 300k-DQN (Ø 47.94), danach testweise auch 1-Mio.-Steps-Lauf, um zu prüfen, ob PPO das gleiche Spät-Instabilitätsmuster wie DQN zeigt oder stabiler bleibt
+- TensorBoard beim Trainieren mitlaufen lassen (`tensorboard --logdir experiments`), insbesondere `rollout/score_mean` und `eval/mean_reward` im Blick behalten
