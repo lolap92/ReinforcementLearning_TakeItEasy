@@ -54,6 +54,7 @@ Nach dem Training landet alles unter experiments/<run_id>/:
 """
 
 import argparse
+import csv
 import json
 import subprocess
 from datetime import datetime, timezone
@@ -250,6 +251,12 @@ if __name__ == "__main__":
     }]
     with open(run_dir / "summary.json", "w") as f:
         json.dump(summary, f, indent=2)
+
+    with open(run_dir / "episodes.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["agent", "episode_index", "seed", "score"])
+        for i, score in enumerate(scores):
+            writer.writerow(["dqn_full_board_masked", i, args.seed + 1 + i, score])
 
     is_new = not EXPERIMENTS_LOG.exists()
     with open(EXPERIMENTS_LOG, "a") as f:
