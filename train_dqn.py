@@ -38,6 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
+from gymnasium.wrappers import TimeLimit
 from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.monitor import Monitor
@@ -102,7 +103,10 @@ if __name__ == "__main__":
     (run_dir / "tensorboard").mkdir(exist_ok=True)
 
     train_env = Monitor(TakeItEasyEnv())
-    eval_env = Monitor(TakeItEasyEnv())
+    # TimeLimit als Sicherheitsnetz: ohne Action Masking könnte eine deterministische
+    # Eval-Policy (EvalCallback nutzt deterministic=True) sonst dieselbe ungültige
+    # Aktion endlos wiederholen, weil sich der Zustand dabei nicht verändert.
+    eval_env = Monitor(TimeLimit(TakeItEasyEnv(), max_episode_steps=MAX_STEPS_PER_EVAL_EPISODE))
 
     model = DQN(
         "MlpPolicy",

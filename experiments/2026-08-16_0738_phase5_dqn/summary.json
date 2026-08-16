@@ -1,0 +1,11 @@
+[
+  {
+    "name": "dqn_full_board",
+    "n_episodes": 1000,
+    "mean": 0.0,
+    "std": 0.0,
+    "min": 0.0,
+    "max": 0.0,
+    "avg_invalid_actions_per_episode": 199.0
+  }
+]
