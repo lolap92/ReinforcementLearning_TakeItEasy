@@ -33,10 +33,15 @@ sb3-contribs MaskablePPO für Phase 6). Umgesetzt über die offiziellen
 Erweiterungspunkte von SB3: eine QNetwork-Unterklasse maskiert die
 Q-Werte vor dem argmax, eine DQNPolicy-Unterklasse verwendet dieses
 Netz, und DQN.predict() wird überschrieben, damit auch die zufällige
-Exploration (epsilon-greedy) nur unter gültigen Feldern auswählt. Die
-Maske wird direkt aus der Beobachtung abgeleitet (ein Feld ist leer,
-wenn alle 3 zugehörigen Werte 0 sind, siehe env.py _get_obs) - der
-Observation Space musste dafür nicht verändert werden.
+Exploration (epsilon-greedy) nur unter gültigen Feldern auswählt.
+Zusätzlich überschreibt MaskedDQN auch _sample_action(): SB3s Original
+zieht dort vor learning_starts komplett ungemaskt über
+self.action_space.sample() (reiner Warmup vor jeglichem Lernen), was
+sonst learning_starts Steps lang den Replay-Buffer mit größtenteils
+ungültigen Zügen füllt. Die Maske wird direkt aus der Beobachtung
+abgeleitet (ein Feld ist leer, wenn alle 3 zugehörigen Werte 0 sind,
+siehe env.py _get_obs) - der Observation Space musste dafür nicht
+verändert werden.
 
 Nutzung (lokal, in deiner IDE):
     pip install -r requirements.txt
@@ -112,20 +117,42 @@ class MaskedDQNPolicy(DQNPolicy):
         return MaskedQNetwork(**net_args).to(self.device)
 
 
+def masked_random_action(mask):
+    """Zufällige Aktion nur unter gültigen (unmaskierten) Feldern - gemeinsam
+    genutzt für epsilon-greedy-Exploration (predict) und die Zufalls-Warmup-
+    Phase vor learning_starts (_sample_action)."""
+    if mask.ndim == 1:
+        return np.array(np.random.choice(np.flatnonzero(mask)))
+    return np.array([np.random.choice(np.flatnonzero(m)) for m in mask])
+
+
 class MaskedDQN(DQN):
-    """Überschreibt predict(), damit auch die zufällige epsilon-greedy-
-    Exploration nur unter gültigen Feldern wählt (der Greedy-Pfad ist schon
-    über MaskedQNetwork/MaskedDQNPolicy abgedeckt)."""
+    """Überschreibt predict() UND _sample_action(), damit wirklich jede
+    Zufallsaktion nur unter gültigen Feldern gewählt wird - nicht nur die
+    epsilon-greedy-Exploration nach dem Warmup (predict), sondern auch die
+    initiale Zufalls-Phase vor learning_starts. SB3s Basisimplementierung von
+    _sample_action zieht dort über self.action_space.sample() komplett ohne
+    Masking, was learning_starts Steps lang den Replay-Buffer mit größtenteils
+    ungültigen Zügen füllt (der Greedy-Pfad ist schon über
+    MaskedQNetwork/MaskedDQNPolicy abgedeckt)."""
 
     def predict(self, observation, state=None, episode_start=None, deterministic=False):
         if not deterministic and np.random.rand() < self.exploration_rate:
             mask = obs_to_mask(observation)
-            if mask.ndim == 1:
-                action = np.array(np.random.choice(np.flatnonzero(mask)))
-            else:
-                action = np.array([np.random.choice(np.flatnonzero(m)) for m in mask])
-            return action, state
+            return masked_random_action(mask), state
         return super().predict(observation, state, episode_start, deterministic)
+
+    def _sample_action(self, learning_starts, action_noise=None, n_envs=1):
+        if self.num_timesteps < learning_starts and not (self.use_sde and self.use_sde_at_warmup):
+            assert self._last_obs is not None, "self._last_obs was not set"
+            mask = obs_to_mask(self._last_obs)
+            unscaled_action = masked_random_action(mask)
+        else:
+            assert self._last_obs is not None, "self._last_obs was not set"
+            unscaled_action, _ = self.predict(self._last_obs, deterministic=False)
+        # Discrete-Action-Space (wie hier): keine Rescale/Noise-Logik nötig,
+        # die SB3s Original nur für Box-Spaces braucht - buffer_action == action.
+        return unscaled_action, unscaled_action
 
 
 class ScoreLoggingCallback(BaseCallback):
