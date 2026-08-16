@@ -14,3 +14,4 @@ Ein Lauf pro Zeile. Details (Config, Kennzahlen, Trajektorien) unter `experiment
 | 2026-08-15 | `2026-08-15_0453_phase4_qlearning_mini` | phase4_qlearning_mini | optimal_mini | - | 8.89 | 0.00 | - | - | b27139b |
 | 2026-08-16 | `2026-08-16_0738_phase5_dqn` | phase5_dqn | dqn_full_board | 1000 | 0.00 | 0.00 | 0 | 0 | 1b40674 |
 | 2026-08-16 | `2026-08-16_1227_phase5_dqn_masked` | phase5_dqn_masked | dqn_full_board_masked | 1000 | 47.94 | 19.29 | 0 | 138 | 81aa006 |
+| 2026-08-16 | `2026-08-16_2030_phase5_dqn_masked` | phase5_dqn_masked | dqn_full_board_masked | 1000 | 9.89 | 14.64 | 0 | 95 | 49af315 |
