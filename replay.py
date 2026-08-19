@@ -13,6 +13,10 @@ Nutzung (lokal, wo das models/-Verzeichnis des jeweiligen Laufs noch
 existiert - models/ ist gitignored, siehe .gitignore):
     python replay.py --model experiments/<run_id>/models/final_model.zip --algo ppo --seed 195
     python replay.py --model experiments/<run_id>/models/best_model.zip --algo dqn --seed 42
+
+Mit --html zusätzlich eine visuelle HTML-Ansicht des fertigen Bretts
+schreiben (echte Kachel-Grafiken statt Text, siehe board_render.py):
+    python replay.py --model ... --algo ppo --seed 195 --html board.html
 """
 
 import argparse
@@ -33,6 +37,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", required=True, help="Pfad zu einer .zip-Modelldatei (final_model.zip oder best_model.zip)")
     parser.add_argument("--algo", choices=["dqn", "ppo"], required=True)
     parser.add_argument("--seed", type=int, required=True, help="Seed aus der episodes.csv-Zeile der gewünschten Runde")
+    parser.add_argument("--html", type=str, default=None, help="Pfad, unter dem eine visuelle HTML-Ansicht des Bretts gespeichert wird")
     args = parser.parse_args()
 
     model = load_model(args.model, args.algo)
@@ -50,3 +55,10 @@ if __name__ == "__main__":
 
     env.render()
     print(f"\nFinaler Score: {reward:.0f}")
+
+    if args.html:
+        from board_render import board_to_html
+        html = board_to_html(env.board, score=reward, title=f"Take It Easy - {args.algo.upper()}, Seed {args.seed}, Score {reward:.0f}")
+        with open(args.html, "w") as f:
+            f.write(html)
+        print(f"Visuelles Brett gespeichert unter: {args.html}")
