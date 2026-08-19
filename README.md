@@ -85,7 +85,7 @@ wird automatisch eine Zeile in `EXPERIMENTS.md` angehängt.
 Während oder nach einem Trainingslauf, in einem zweiten Terminal:
 
 ```bash
-tensorboard --logdir experiments
+python -m tensorboard.main --logdir experiments
 ```
 
 Danach im Browser öffnen: **[http://localhost:6006](http://localhost:6006)**
