@@ -62,6 +62,7 @@ python train_dqn.py --timesteps 1000000 --device cuda --tag mein_lauf
 ```bash
 python train_ppo.py --timesteps 300000
 python train_ppo.py --timesteps 1000000 --device cuda --tag mein_lauf
+python train_ppo.py --timesteps 1000000 --n-envs 8   # 8 Environments parallel
 ```
 
 | Parameter | Typ | Default | Bedeutung |
@@ -71,6 +72,7 @@ python train_ppo.py --timesteps 1000000 --device cuda --tag mein_lauf
 | `--seed` | int | `0` | Master-Seed (Trainingslauf; Eval-Episoden nutzen `seed + 1 + i`) |
 | `--tag` | str | `phase6_maskable_ppo` | Freitext, wird Teil des Run-Ordner-Namens unter `experiments/` |
 | `--device` | str | `auto` | `auto` (SB3 wählt), `cuda` (GPU erzwingen) oder `cpu` – gleicher Hinweis wie bei DQN |
+| `--n-envs` | int | `1` | Anzahl paralleler Trainings-Environments. `1` = wie bisher ein einzelner Prozess; `>1` läuft über separate Prozesse (`SubprocVecEnv`) – vielfältigere, weniger korrelierte Trajektorien pro Policy-Update und bessere CPU-Auslastung. Achtung: Gesamt-Batchgröße pro Update ist dann `n_steps * n_envs`, nicht mehr nur `n_steps` |
 
 Beide Skripte legen ihre Ergebnisse unter `experiments/<run_id>/` ab
 (`run_id` = Zeitstempel + `--tag`): `config.json`/`summary.json` (git-tracked,
