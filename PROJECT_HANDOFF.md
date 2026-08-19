@@ -40,17 +40,27 @@ Fokus liegt auf dem **Verständnis der RL-Grundlagen** (nicht primär auf State-
 4. **✅ Tabular Q-Learning auf Mini-Board** (erledigt)
    Y-förmiges Mini-Board, Q-Learning (Ø 8.81) knapp über Random (Ø 6.56), nahe am errechneten Optimum (8.89) – siehe `experiments/2026-08-1[45]_*_phase4_qlearning_mini/`
 
-5. **✅ DQN via Stable-Baselines3** (erledigt)
+5. **✅ DQN via Stable-Baselines3** (erledigt, mit wichtigem Instabilitäts-Befund)
    - Erster Lauf ohne Action Masking divergierte vollständig (Score 0 über 1000 Episoden trotz 1 Mio. Steps) – Ursache: ungültige Züge führen zu einem selbstreferentiellen Bellman-Update, verschärft durch `gamma=1.0`. Siehe `experiments/2026-08-16_0738_phase5_dqn/NOTES.md`.
    - Mit Action Masking (eigene `MaskedDQN`/`MaskedQNetwork`, da SB3-DQN kein natives Masking hat) lief ein 300k-Steps-Lauf stabil und gut: Ø 47.94, deutlich über Greedy (`experiments/2026-08-16_1227_phase5_dqn_masked/`).
-   - Ein längerer 1-Mio-Steps-Lauf mit identischer Config fiel danach überraschend auf Ø 9.89 zurück (`experiments/2026-08-16_2030_phase5_dqn_masked/`) – **kein Masking-Problem** (0 ungültige Züge), sondern vermutlich klassische DQN-Instabilität durch späte Q-Value-Überschätzung (kein Double-DQN, `gamma=1.0`, `buffer_size=100k` verdrängt bei 1M Steps alte gute Erfahrung). Lehre: das *Endmodell* nach N Steps ist bei DQN kein verlässlicher Indikator, das beste Zwischen-Checkpoint schon eher.
-   - `train_dqn.py` wertet seitdem zusätzlich automatisch das von `EvalCallback` gespeicherte beste Zwischen-Checkpoint aus (`*_best_checkpoint` in `summary.json`/`EXPERIMENTS.md`), loggt den Spiel-Score explizit als eigenes TensorBoard-Tag (`rollout/score_mean`, klarer als der SB3-Standard `ep_rew_mean`) und unterstützt `--device cuda|cpu|auto` zur expliziten GPU-Wahl.
+   - Ein 1-Mio-Steps-Lauf mit identischer Config fiel danach überraschend auf Ø 9.89 zurück (`experiments/2026-08-16_2030_phase5_dqn_masked/`) – **kein Masking-Problem** (0 ungültige Züge), sondern vermutlich klassische DQN-Instabilität durch späte Q-Value-Überschätzung (kein Double-DQN, `gamma=1.0`, `buffer_size=100k` verdrängt bei 1M Steps alte gute Erfahrung).
+   - Zusätzlicher gefundener Bug: `_sample_action()` (SB3-intern) samplete vor `learning_starts` komplett ungemaskt – gefixt in `train_dqn.py` (siehe Commit `c758a6a`).
+   - **Wiederholter 300k-Lauf nach dem Fix: Ø 31.89 (Endmodell) / 36.21 (bestes Checkpoint)** (`experiments/2026-08-16_2108_phase5_dqn_masked/`) – schlechter als der ursprüngliche 300k-Lauf (47.94)! Der Fix behebt zwar den konkreten Bug, aber die Kernaussage bleibt: **DQN-Ergebnisse auf diesem Environment streuen extrem von Lauf zu Lauf** (9.89 / 31.89 / 47.94 bei ansonsten identischen Hyperparametern) – ein einzelner Lauf ist hier kein verlässlicher Leistungsindikator, egal ob Endmodell oder Best-Checkpoint.
+   - `train_dqn.py` wertet seitdem zusätzlich automatisch das von `EvalCallback` gespeicherte beste Zwischen-Checkpoint aus (`*_best_checkpoint` in `summary.json`/`EXPERIMENTS.md`), loggt den Spiel-Score explizit als eigenes TensorBoard-Tag (`rollout/score_mean`) und unterstützt `--device cuda|cpu|auto` zur expliziten GPU-Wahl (bisher liefen aber alle Läufe laut `config.json` auf `cpu`).
 
-6. **⏳ PPO / MaskablePPO via SB3** (nächster Schritt – Skript steht, noch nicht lokal trainiert)
-   `train_ppo.py` ist fertig (analog zu `train_dqn.py`: gleiches Environment, gleiches Netz `[128,128]`, `gamma=1.0`, gleiche Auswertungsmethodik, inkl. Best-Checkpoint-Auswertung). Anders als bei DQN übernimmt `sb3-contrib`s `ActionMasker`/`MaskablePPO` das Masking nativ, kein eigener Policy-Hack nötig. Zu prüfen: ob Policy-based RL hier stabiler über lange Trainingsläufe ist als das DQN-Ergebnis aus Phase 5. Empfehlung: erst 300k Steps laufen lassen und mit dem 300k-DQN-Ergebnis (Ø 47.94) vergleichen, danach ggf. 1 Mio. Steps wiederholen, um gezielt auf das gleiche Instabilitätsmuster wie bei DQN zu prüfen.
+6. **✅ PPO / MaskablePPO via SB3** (erledigt – klarer Gewinner ggü. DQN)
+   `train_ppo.py` (analog zu `train_dqn.py`, aber natives Masking über `sb3-contrib`s `ActionMasker`/`MaskablePPO`, kein eigener Policy-Hack nötig) wurde mit 300k, 1 Mio. und 25 Mio. Steps trainiert:
 
-7. **Evaluation** (offen)
-   Viele Testepisoden je Agent, Score-Verteilungen vs. Baselines aus Phase 3 vergleichen
+   | Steps | PPO Ø (Endmodell) | PPO Ø (Best-Checkpoint) | zum Vergleich DQN Ø |
+   |---|---|---|---|
+   | 300k | 52.09 | 53.08 | 47.94 / 31.89 (zwei Läufe, siehe oben) |
+   | 1 Mio. | 92.81 | 90.39 | 9.89 (kollabiert) |
+   | 25 Mio. | 108.86 | 108.27 | – |
+
+   Zwei zentrale Beobachtungen: (1) PPO verbessert sich **monoton** mit mehr Trainingszeit statt zu kollabieren wie DQN – Endmodell und Best-Checkpoint liegen bei PPO in allen drei Läufen praktisch gleichauf, es gibt keinen "Rettungsanker" durch Best-Checkpoint-Auswertung nötig, weil nichts einbricht. (2) Deutlich abnehmender Grenznutzen: 300k→1M (+3.3× Steps) bringt +40 Punkte, 1M→25M (+25× Steps) nur noch +16 Punkte – GPU/mehr Compute ist hier vermutlich nicht der wirksamste Hebel mehr, siehe Nächster Schritt.
+
+7. **⏳ Evaluation** (nächster Schritt)
+   Viele Testepisoden je Agent, Score-Verteilungen vs. Baselines aus Phase 3 vergleichen; PPO (Ø 108.86 bei 25M Steps) liegt klar über Greedy (27.72) und allen DQN-Läufen, aber noch unter guten menschlichen Spielern (ca. 150-170) und weit unter dem theoretischen Maximum (307)
 
 ## Bisheriger Stand (Details zu Phase 2)
 
@@ -103,8 +113,9 @@ python env.py    # sollte Board-Render + Random-Agent-Score ausgeben
 
 ## Nächster Schritt
 
-**Phase 6: MaskablePPO trainieren**
-- `train_ppo.py` ist vorbereitet (siehe Phase 6 oben), aber noch nicht lokal trainiert
-- Lokal ausführen: `python train_ppo.py --timesteps 300000`, danach `config.json`/`summary.json`/`EXPERIMENTS.md`-Zeile committen (wie bei den DQN-Läufen)
-- Vergleich gegen DQN Phase 5: 300k-PPO vs. 300k-DQN (Ø 47.94), danach testweise auch 1-Mio.-Steps-Lauf, um zu prüfen, ob PPO das gleiche Spät-Instabilitätsmuster wie DQN zeigt oder stabiler bleibt
-- TensorBoard beim Trainieren mitlaufen lassen (`tensorboard --logdir experiments`), insbesondere `rollout/score_mean` und `eval/mean_reward` im Blick behalten
+**Phase 7: Evaluation / Feinschliff, zwei mögliche Richtungen**
+
+1. **Hyperparameter statt mehr Steps.** PPO zeigt deutlich abnehmenden Grenznutzen (300k→1M: +40 Punkte, 1M→25M: nur +16 Punkte trotz 25× mehr Steps) – 25 Mio. Steps auf der CPU war vermutlich eine sehr lange Laufzeit für relativ wenig Zugewinn. Bevor noch mehr Compute investiert wird, lohnt sich eher Tuning: größeres Netz (aktuell nur `[128,128]`, evtl. `[256,256]` oder tiefer), `n_steps`/`batch_size` anpassen, `ent_coef` reduzieren sobald die Policy konvergiert, oder Reward-Normalisierung (Score bis 307, `gamma=1.0` ungeglättet – SB3s `VecNormalize` könnte das Lernen stabilisieren/beschleunigen).
+2. **Sauberer Abschlussvergleich.** Aktuell existieren mehrere DQN- und PPO-Läufe mit unterschiedlichem Compute-Budget nebeneinander. Für Phase 7 (Evaluation) wäre ein finaler Vergleich sinnvoll: das beste Modell je Algorithmus (PPO 25M vs. bestes DQN-Checkpoint) über die gleichen 1000 Eval-Episoden/Seeds gegen Random und Greedy aus Phase 3, als eine zusammenfassende Tabelle/Grafik in `reports/`.
+
+Offene Frage an dich: eher Hyperparameter-Tuning für PPO ausprobieren, oder erstmal mit dem aktuellen 25M-Modell den Abschlussvergleich/Report für Phase 7 bauen?
