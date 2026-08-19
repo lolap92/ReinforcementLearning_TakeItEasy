@@ -22,8 +22,9 @@ Nutzung (lokal, in deiner IDE):
     # In einem zweiten Terminal, um live mitzuverfolgen:
     tensorboard --logdir experiments
     # dann im Browser: http://localhost:6006
-    # rollout/score_mean = Spiel-Score (nicht nur Reward), eval/mean_reward
-    # = Score des Eval-Checkpoints alle 10k Steps
+    # rollout/score_mean/min/max = Spiel-Score (nicht nur Reward) über die
+    # letzten 100 Trainings-Episoden, eval/mean_reward = Score des
+    # Eval-Checkpoints alle 10k Steps
 
 Nach dem Training landet alles unter experiments/<run_id>/:
   - config.json, summary.json          -> ins Git-Repo committen
@@ -66,18 +67,23 @@ def mask_fn(env) -> np.ndarray:
 
 
 class ScoreLoggingCallback(BaseCallback):
-    """Loggt den Spiel-Score separat unter einem eigenen TensorBoard-Tag
-    (`rollout/score_mean`), statt ihn nur implizit unter dem generischen
-    SB3-Tag `rollout/ep_rew_mean` mitlaufen zu lassen. Rechnerisch ist beides
-    identisch: der Reward ist 0 in jedem Zug außer dem letzten, wo er genau
-    dem Spiel-Score entspricht (siehe env.py), die Episodensumme des Rewards
-    *ist* also der Score. Das eigene Tag macht das im TensorBoard-Dashboard
-    aber sofort ohne Nachdenken ablesbar."""
+    """Loggt den Spiel-Score separat unter eigenen TensorBoard-Tags
+    (`rollout/score_mean`, `rollout/score_min`, `rollout/score_max`), statt
+    ihn nur implizit unter dem generischen SB3-Tag `rollout/ep_rew_mean`
+    mitlaufen zu lassen. Rechnerisch ist Mean identisch zu ep_rew_mean: der
+    Reward ist 0 in jedem Zug außer dem letzten, wo er genau dem Spiel-Score
+    entspricht (siehe env.py), die Episodensumme des Rewards *ist* also der
+    Score. Min/Max zeigen zusätzlich die beste/schlechteste Runde innerhalb
+    des rollierenden Fensters (die letzten 100 Episoden, SB3-Default) - das
+    eigene Tag macht das im TensorBoard-Dashboard sofort ohne Nachdenken
+    ablesbar."""
 
     def _on_step(self) -> bool:
         if len(self.model.ep_info_buffer) > 0:
             scores = [ep_info["r"] for ep_info in self.model.ep_info_buffer]
             self.logger.record("rollout/score_mean", float(np.mean(scores)))
+            self.logger.record("rollout/score_min", float(np.min(scores)))
+            self.logger.record("rollout/score_max", float(np.max(scores)))
         return True
 
 
