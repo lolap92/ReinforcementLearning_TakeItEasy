@@ -142,8 +142,8 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--tag", type=str, default="phase6_maskable_ppo")
     parser.add_argument(
-        "--device", type=str, default="auto",
-        help="'auto' (SB3 wählt), 'cuda' (GPU erzwingen) oder 'cpu'. "
+        "--device", type=str, default="cpu",
+        help="'cpu' (Default), 'cuda' (GPU erzwingen) oder 'auto' (SB3 wählt). "
              "Hinweis: bei einem so kleinen Netz (128,128) ist der "
              "Flaschenhals meist der CPU-seitige Env-Step, nicht das Netz "
              "selbst - GPU bringt hier oft wenig bis nichts, schadet aber "

@@ -1,0 +1,26 @@
+{
+  "run_id": "2026-08-19_0658_phase6_maskable_ppo",
+  "tag": "phase6_maskable_ppo",
+  "timestamp": "2026-08-19T06:58:57+02:00",
+  "git_commit": "f0fcffc",
+  "env": "TakeItEasyEnv",
+  "algorithm": "MaskablePPO (sb3-contrib)",
+  "hyperparameters": {
+    "timesteps": 1000000,
+    "learning_rate": 0.0003,
+    "n_steps": 512,
+    "batch_size": 64,
+    "n_epochs": 10,
+    "gamma": 1.0,
+    "gae_lambda": 0.95,
+    "ent_coef": 0.01,
+    "net_arch": [
+      128,
+      128
+    ]
+  },
+  "eval_episodes": 1000,
+  "master_seed": 0,
+  "device": "cuda",
+  "n_envs": 8
+}

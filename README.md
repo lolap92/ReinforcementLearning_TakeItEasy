@@ -55,7 +55,7 @@ python train_dqn.py --timesteps 1000000 --device cuda --tag mein_lauf
 | `--eval-episodes` | int | `1000` | Anzahl Episoden für die finale Auswertung nach dem Training |
 | `--seed` | int | `0` | Master-Seed (Trainingslauf; Eval-Episoden nutzen `seed + 1 + i`) |
 | `--tag` | str | `phase5_dqn_masked` | Freitext, wird Teil des Run-Ordner-Namens unter `experiments/` |
-| `--device` | str | `auto` | `auto` (SB3 wählt), `cuda` (GPU erzwingen) oder `cpu`. Bei diesem kleinen Netz (128,128) ist der Flaschenhals meist der CPU-seitige Env-Step, GPU bringt oft wenig |
+| `--device` | str | `cpu` | `cpu` (Default), `cuda` (GPU erzwingen) oder `auto` (SB3 wählt). Bei diesem kleinen Netz (128,128) ist der Flaschenhals meist der CPU-seitige Env-Step, GPU bringt oft wenig |
 
 ### MaskablePPO
 
@@ -71,7 +71,7 @@ python train_ppo.py --timesteps 1000000 --n-envs 8   # 8 Environments parallel
 | `--eval-episodes` | int | `1000` | Anzahl Episoden für die finale Auswertung nach dem Training |
 | `--seed` | int | `0` | Master-Seed (Trainingslauf; Eval-Episoden nutzen `seed + 1 + i`) |
 | `--tag` | str | `phase6_maskable_ppo` | Freitext, wird Teil des Run-Ordner-Namens unter `experiments/` |
-| `--device` | str | `auto` | `auto` (SB3 wählt), `cuda` (GPU erzwingen) oder `cpu` – gleicher Hinweis wie bei DQN |
+| `--device` | str | `cpu` | `cpu` (Default), `cuda` (GPU erzwingen) oder `auto` (SB3 wählt) – gleicher Hinweis wie bei DQN |
 | `--n-envs` | int | `1` | Anzahl paralleler Trainings-Environments. `1` = wie bisher ein einzelner Prozess; `>1` läuft über separate Prozesse (`SubprocVecEnv`) – vielfältigere, weniger korrelierte Trajektorien pro Policy-Update und bessere CPU-Auslastung. Achtung: Gesamt-Batchgröße pro Update ist dann `n_steps * n_envs`, nicht mehr nur `n_steps` |
 
 Beide Skripte legen ihre Ergebnisse unter `experiments/<run_id>/` ab

@@ -23,3 +23,5 @@ Ein Lauf pro Zeile. Details (Config, Kennzahlen, Trajektorien) unter `experiment
 | 2026-08-16 | `2026-08-16_2112_phase6_maskable_ppo` | phase6_maskable_ppo | ppo_full_board_masked_best_checkpoint | 1000 | 90.39 | 25.72 | 5 | 153 | 20039a1 |
 | 2026-08-16 | `2026-08-16_2133_phase6_maskable_ppo` | phase6_maskable_ppo | ppo_full_board_masked | 1000 | 108.86 | 25.19 | 20 | 190 | 6e167f0 |
 | 2026-08-16 | `2026-08-16_2133_phase6_maskable_ppo` | phase6_maskable_ppo | ppo_full_board_masked_best_checkpoint | 1000 | 108.27 | 26.37 | 24 | 188 | 6e167f0 |
+| 2026-08-19 | `2026-08-19_0658_phase6_maskable_ppo` | phase6_maskable_ppo | ppo_full_board_masked | 1000 | 83.35 | 22.39 | 0 | 163 | f0fcffc |
+| 2026-08-19 | `2026-08-19_0658_phase6_maskable_ppo` | phase6_maskable_ppo | ppo_full_board_masked_best_checkpoint | 1000 | 82.87 | 21.64 | 0 | 168 | f0fcffc |
