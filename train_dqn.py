@@ -33,18 +33,26 @@ sb3-contribs MaskablePPO für Phase 6). Umgesetzt über die offiziellen
 Erweiterungspunkte von SB3: eine QNetwork-Unterklasse maskiert die
 Q-Werte vor dem argmax, eine DQNPolicy-Unterklasse verwendet dieses
 Netz, und DQN.predict() wird überschrieben, damit auch die zufällige
-Exploration (epsilon-greedy) nur unter gültigen Feldern auswählt. Die
-Maske wird direkt aus der Beobachtung abgeleitet (ein Feld ist leer,
-wenn alle 3 zugehörigen Werte 0 sind, siehe env.py _get_obs) - der
-Observation Space musste dafür nicht verändert werden.
+Exploration (epsilon-greedy) nur unter gültigen Feldern auswählt.
+Zusätzlich überschreibt MaskedDQN auch _sample_action(): SB3s Original
+zieht dort vor learning_starts komplett ungemaskt über
+self.action_space.sample() (reiner Warmup vor jeglichem Lernen), was
+sonst learning_starts Steps lang den Replay-Buffer mit größtenteils
+ungültigen Zügen füllt. Die Maske wird direkt aus der Beobachtung
+abgeleitet (ein Feld ist leer, wenn alle 3 zugehörigen Werte 0 sind,
+siehe env.py _get_obs) - der Observation Space musste dafür nicht
+verändert werden.
 
 Nutzung (lokal, in deiner IDE):
     pip install -r requirements.txt
     python train_dqn.py --timesteps 300000
+    python train_dqn.py --timesteps 1000000 --device cuda   # GPU erzwingen
 
     # In einem zweiten Terminal, um live mitzuverfolgen:
     tensorboard --logdir experiments
     # dann im Browser: http://localhost:6006
+    # rollout/score_mean = Spiel-Score (nicht nur Reward), eval/mean_reward
+    # = Score des Eval-Checkpoints alle 10k Steps
 
 Nach dem Training landet alles unter experiments/<run_id>/:
   - config.json, summary.json          -> ins Git-Repo committen
@@ -65,7 +73,7 @@ import torch as th
 from gymnasium.wrappers import TimeLimit
 from stable_baselines3 import DQN
 from stable_baselines3.dqn.policies import DQNPolicy, QNetwork
-from stable_baselines3.common.callbacks import EvalCallback
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList, EvalCallback
 from stable_baselines3.common.monitor import Monitor
 
 from env import TakeItEasyEnv, NUM_CELLS
@@ -109,20 +117,58 @@ class MaskedDQNPolicy(DQNPolicy):
         return MaskedQNetwork(**net_args).to(self.device)
 
 
+def masked_random_action(mask):
+    """Zufällige Aktion nur unter gültigen (unmaskierten) Feldern - gemeinsam
+    genutzt für epsilon-greedy-Exploration (predict) und die Zufalls-Warmup-
+    Phase vor learning_starts (_sample_action)."""
+    if mask.ndim == 1:
+        return np.array(np.random.choice(np.flatnonzero(mask)))
+    return np.array([np.random.choice(np.flatnonzero(m)) for m in mask])
+
+
 class MaskedDQN(DQN):
-    """Überschreibt predict(), damit auch die zufällige epsilon-greedy-
-    Exploration nur unter gültigen Feldern wählt (der Greedy-Pfad ist schon
-    über MaskedQNetwork/MaskedDQNPolicy abgedeckt)."""
+    """Überschreibt predict() UND _sample_action(), damit wirklich jede
+    Zufallsaktion nur unter gültigen Feldern gewählt wird - nicht nur die
+    epsilon-greedy-Exploration nach dem Warmup (predict), sondern auch die
+    initiale Zufalls-Phase vor learning_starts. SB3s Basisimplementierung von
+    _sample_action zieht dort über self.action_space.sample() komplett ohne
+    Masking, was learning_starts Steps lang den Replay-Buffer mit größtenteils
+    ungültigen Zügen füllt (der Greedy-Pfad ist schon über
+    MaskedQNetwork/MaskedDQNPolicy abgedeckt)."""
 
     def predict(self, observation, state=None, episode_start=None, deterministic=False):
         if not deterministic and np.random.rand() < self.exploration_rate:
             mask = obs_to_mask(observation)
-            if mask.ndim == 1:
-                action = np.array(np.random.choice(np.flatnonzero(mask)))
-            else:
-                action = np.array([np.random.choice(np.flatnonzero(m)) for m in mask])
-            return action, state
+            return masked_random_action(mask), state
         return super().predict(observation, state, episode_start, deterministic)
+
+    def _sample_action(self, learning_starts, action_noise=None, n_envs=1):
+        if self.num_timesteps < learning_starts and not (self.use_sde and self.use_sde_at_warmup):
+            assert self._last_obs is not None, "self._last_obs was not set"
+            mask = obs_to_mask(self._last_obs)
+            unscaled_action = masked_random_action(mask)
+        else:
+            assert self._last_obs is not None, "self._last_obs was not set"
+            unscaled_action, _ = self.predict(self._last_obs, deterministic=False)
+        # Discrete-Action-Space (wie hier): keine Rescale/Noise-Logik nötig,
+        # die SB3s Original nur für Box-Spaces braucht - buffer_action == action.
+        return unscaled_action, unscaled_action
+
+
+class ScoreLoggingCallback(BaseCallback):
+    """Loggt den Spiel-Score separat unter einem eigenen TensorBoard-Tag
+    (`rollout/score_mean`), statt ihn nur implizit unter dem generischen
+    SB3-Tag `rollout/ep_rew_mean` mitlaufen zu lassen. Rechnerisch ist beides
+    identisch: der Reward ist 0 in jedem Zug außer dem letzten, wo er genau
+    dem Spiel-Score entspricht (siehe env.py), die Episodensumme des Rewards
+    *ist* also der Score. Das eigene Tag macht das im TensorBoard-Dashboard
+    aber sofort ohne Nachdenken ablesbar."""
+
+    def _on_step(self) -> bool:
+        if len(self.model.ep_info_buffer) > 0:
+            scores = [ep_info["r"] for ep_info in self.model.ep_info_buffer]
+            self.logger.record("rollout/score_mean", float(np.mean(scores)))
+        return True
 
 
 def git_commit_hash():
@@ -163,6 +209,14 @@ if __name__ == "__main__":
     parser.add_argument("--eval-episodes", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--tag", type=str, default="phase5_dqn_masked")
+    parser.add_argument(
+        "--device", type=str, default="auto",
+        help="'auto' (SB3 wählt), 'cuda' (GPU erzwingen) oder 'cpu'. "
+             "Hinweis: bei einem so kleinen Netz (128,128) und Batch-Size 64 "
+             "ist der Flaschenhals meist der CPU-seitige Env-Step, nicht das "
+             "Netz selbst - GPU bringt hier oft wenig bis nichts, schadet "
+             "aber auch nicht.",
+    )
     args = parser.parse_args()
 
     timestamp = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
@@ -192,8 +246,10 @@ if __name__ == "__main__":
         policy_kwargs=dict(net_arch=[128, 128]),
         tensorboard_log=str(run_dir / "tensorboard"),
         seed=args.seed,
+        device=args.device,
         verbose=1,
     )
+    print(f"Gewähltes Device: {model.device}")
 
     eval_callback = EvalCallback(
         eval_env,
@@ -203,16 +259,41 @@ if __name__ == "__main__":
         n_eval_episodes=50,
         deterministic=True,
     )
+    score_callback = ScoreLoggingCallback()
 
     print(f"Trainiere DQN (mit Action Masking) für {args.timesteps} Timesteps ...")
-    model.learn(total_timesteps=args.timesteps, callback=eval_callback, tb_log_name="dqn")
+    model.learn(
+        total_timesteps=args.timesteps,
+        callback=CallbackList([score_callback, eval_callback]),
+        tb_log_name="dqn",
+    )
     model.save(str(run_dir / "models" / "final_model"))
 
     print("\nAuswertung über echte Take-It-Easy-Episoden (19 Züge, volles Board) ...")
     scores, invalid_counts = evaluate(model, args.eval_episodes, seed=args.seed + 1)
-    print(f"DQN (gelernt):  mean={scores.mean():.2f}  std={scores.std():.2f}  "
-          f"min={scores.min():.0f}  max={scores.max():.0f}")
+    print(f"DQN (Endmodell nach {args.timesteps} Steps):  mean={scores.mean():.2f}  "
+          f"std={scores.std():.2f}  min={scores.min():.0f}  max={scores.max():.0f}")
     print(f"Ungültige Züge je Episode (Ø, sollte 0 sein): {invalid_counts.mean():.2f}")
+
+    # DQN ist bekanntermaßen instabil über lange Trainingsläufe (Q-Value-
+    # Überschätzung, siehe Docstring oben) - das Endmodell kann schlechter
+    # sein als ein Zwischenstand. EvalCallback speichert deshalb laufend das
+    # beste Zwischen-Checkpoint (best_model.zip) nach eval/mean_reward -
+    # das werten wir hier zusätzlich aus, um genau diesen Fall sichtbar zu
+    # machen, statt ihn stillschweigend im Endmodell-Ergebnis zu verstecken.
+    best_model_path = run_dir / "models" / "best_model.zip"
+    best_scores = None
+    if best_model_path.exists():
+        best_model = MaskedDQN.load(str(best_model_path), env=train_env, device=args.device)
+        best_scores, best_invalid_counts = evaluate(best_model, args.eval_episodes, seed=args.seed + 1)
+        print(f"DQN (bestes Zwischen-Checkpoint):           mean={best_scores.mean():.2f}  "
+              f"std={best_scores.std():.2f}  min={best_scores.min():.0f}  max={best_scores.max():.0f}")
+        print(f"Ungültige Züge je Episode (Ø, sollte 0 sein): {best_invalid_counts.mean():.2f}")
+        if best_scores.mean() > scores.mean():
+            print(
+                "-> Bestes Checkpoint schlägt Endmodell deutlich: Hinweis auf "
+                "Instabilität/Überschätzung spät im Training (siehe Docstring)."
+            )
 
     config = {
         "run_id": run_id,
@@ -236,6 +317,7 @@ if __name__ == "__main__":
         },
         "eval_episodes": args.eval_episodes,
         "master_seed": args.seed,
+        "device": str(model.device),
     }
     with open(run_dir / "config.json", "w") as f:
         json.dump(config, f, indent=2)
@@ -249,6 +331,16 @@ if __name__ == "__main__":
         "max": float(scores.max()),
         "avg_invalid_actions_per_episode": float(invalid_counts.mean()),
     }]
+    if best_scores is not None:
+        summary.append({
+            "name": "dqn_full_board_masked_best_checkpoint",
+            "n_episodes": args.eval_episodes,
+            "mean": float(best_scores.mean()),
+            "std": float(best_scores.std()),
+            "min": float(best_scores.min()),
+            "max": float(best_scores.max()),
+            "avg_invalid_actions_per_episode": float(best_invalid_counts.mean()),
+        })
     with open(run_dir / "summary.json", "w") as f:
         json.dump(summary, f, indent=2)
 
@@ -257,6 +349,9 @@ if __name__ == "__main__":
         writer.writerow(["agent", "episode_index", "seed", "score"])
         for i, score in enumerate(scores):
             writer.writerow(["dqn_full_board_masked", i, args.seed + 1 + i, score])
+        if best_scores is not None:
+            for i, score in enumerate(best_scores):
+                writer.writerow(["dqn_full_board_masked_best_checkpoint", i, args.seed + 1 + i, score])
 
     is_new = not EXPERIMENTS_LOG.exists()
     with open(EXPERIMENTS_LOG, "a") as f:
