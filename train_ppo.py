@@ -18,6 +18,16 @@ Nutzung (lokal, in deiner IDE):
     pip install -r requirements.txt
     python train_ppo.py --timesteps 300000
     python train_ppo.py --timesteps 1000000 --device cuda   # GPU erzwingen
+    python train_ppo.py --timesteps 1000000 --n-envs 8      # 8 Envs parallel
+
+--n-envs (Optimierung, siehe Chat): PPO sammelt Rollouts normalerweise über
+mehrere Environments gleichzeitig statt nur einer - das gibt pro Policy-
+Update vielfältigere, weniger korrelierte Trajektorien (stabilere Advantage-
+Schätzung) und nutzt mehrere CPU-Kerne parallel aus (relevant, weil hier laut
+--device-Hinweis unten ohnehin meist auf CPU trainiert wird). Ab n-envs > 1
+werden die Environments über separate Prozesse (SubprocVecEnv) parallelisiert
+- Vorsicht: Gesamt-Batchgröße pro Update ist dann n_steps * n_envs, nicht mehr
+nur n_steps.
 
     # In einem zweiten Terminal, um live mitzuverfolgen:
     tensorboard --logdir experiments
@@ -46,7 +56,9 @@ from sb3_contrib import MaskablePPO
 from sb3_contrib.common.wrappers import ActionMasker
 from sb3_contrib.common.maskable.callbacks import MaskableEvalCallback
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList
+from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
 from env import TakeItEasyEnv, NUM_CELLS
 
@@ -137,6 +149,12 @@ if __name__ == "__main__":
              "selbst - GPU bringt hier oft wenig bis nichts, schadet aber "
              "auch nicht.",
     )
+    parser.add_argument(
+        "--n-envs", type=int, default=1,
+        help="Anzahl paralleler Trainings-Environments (siehe Docstring oben). "
+             "1 = wie bisher (ein einzelner Prozess), >1 = separate Prozesse "
+             "(SubprocVecEnv) - mehr Kerne genutzt, aber auch mehr RAM/Overhead.",
+    )
     args = parser.parse_args()
 
     timestamp = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
@@ -145,7 +163,12 @@ if __name__ == "__main__":
     (run_dir / "models").mkdir(parents=True, exist_ok=True)
     (run_dir / "tensorboard").mkdir(exist_ok=True)
 
-    train_env = Monitor(make_env())
+    train_env = make_vec_env(
+        make_env,
+        n_envs=args.n_envs,
+        seed=args.seed,
+        vec_env_cls=SubprocVecEnv if args.n_envs > 1 else DummyVecEnv,
+    )
     eval_env = Monitor(make_env())
 
     model = MaskablePPO(
@@ -230,6 +253,7 @@ if __name__ == "__main__":
         "eval_episodes": args.eval_episodes,
         "master_seed": args.seed,
         "device": str(model.device),
+        "n_envs": args.n_envs,
     }
     with open(run_dir / "config.json", "w") as f:
         json.dump(config, f, indent=2)
