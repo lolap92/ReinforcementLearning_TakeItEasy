@@ -15,13 +15,22 @@ existiert - models/ ist gitignored, siehe .gitignore):
     python replay.py --model experiments/<run_id>/models/best_model.zip --algo dqn --seed 42
 
 Mit --html zusätzlich eine visuelle HTML-Ansicht des fertigen Bretts
-schreiben (echte Kachel-Grafiken statt Text, siehe board_render.py):
+schreiben (echte Kachel-Grafiken statt Text, siehe board_render.py). Landet
+immer im eigenen replay/-Ordner (gitignored, siehe .gitignore) - --html
+nimmt nur einen Dateinamen entgegen, kein Pfad:
     python replay.py --model ... --algo ppo --seed 195 --html board.html
+    # -> replay/board.html
+    python replay.py --model ... --algo ppo --seed 195 --html
+    # ohne Dateiname: automatisch replay/<algo>_<seed>.html
 """
 
 import argparse
+from pathlib import Path
 
 from env import TakeItEasyEnv
+
+REPO_ROOT = Path(__file__).resolve().parent
+REPLAY_DIR = REPO_ROOT / "replay"
 
 
 def load_model(path, algo):
@@ -37,7 +46,12 @@ if __name__ == "__main__":
     parser.add_argument("--model", required=True, help="Pfad zu einer .zip-Modelldatei (final_model.zip oder best_model.zip)")
     parser.add_argument("--algo", choices=["dqn", "ppo"], required=True)
     parser.add_argument("--seed", type=int, required=True, help="Seed aus der episodes.csv-Zeile der gewünschten Runde")
-    parser.add_argument("--html", type=str, default=None, help="Pfad, unter dem eine visuelle HTML-Ansicht des Bretts gespeichert wird")
+    parser.add_argument(
+        "--html", type=str, nargs="?", const="",
+        help="Dateiname (kein Pfad) für eine visuelle HTML-Ansicht des Bretts, "
+             "landet immer im replay/-Ordner. Ohne Wert wird der Dateiname "
+             "automatisch aus Algo und Seed erzeugt.",
+    )
     args = parser.parse_args()
 
     model = load_model(args.model, args.algo)
@@ -56,9 +70,12 @@ if __name__ == "__main__":
     env.render()
     print(f"\nFinaler Score: {reward:.0f}")
 
-    if args.html:
+    if args.html is not None:
         from board_render import board_to_html
+        filename = Path(args.html).name if args.html else f"{args.algo}_{args.seed}.html"
+        REPLAY_DIR.mkdir(exist_ok=True)
+        html_path = REPLAY_DIR / filename
         html = board_to_html(env.board, score=reward, title=f"Take It Easy - {args.algo.upper()}, Seed {args.seed}, Score {reward:.0f}")
-        with open(args.html, "w") as f:
+        with open(html_path, "w") as f:
             f.write(html)
-        print(f"Visuelles Brett gespeichert unter: {args.html}")
+        print(f"Visuelles Brett gespeichert unter: {html_path.relative_to(REPO_ROOT)}")

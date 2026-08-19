@@ -7,3 +7,6 @@ experiments/*/models/
 experiments/*/tensorboard/
 models/
 tensorboard/
+
+# Replay-HTMLs: lokal reproduzierbar aus Modell + Seed (siehe replay.py)
+replay/
