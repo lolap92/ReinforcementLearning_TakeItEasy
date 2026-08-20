@@ -119,6 +119,35 @@ def score_board(board):
     return total, details
 
 
+def potential_score(board):
+    """
+    Wie score_board(), aber für (auch teilweise gefüllte) Linien: statt nur
+    komplette, konsistente Linien zu zählen, wird jede noch "lebendige" Linie
+    (alle bisher gelegten Kacheln darin haben denselben Wert in dieser
+    Richtung) mit Wert * Anzahl bereits gelegter Kacheln bewertet. Sobald eine
+    Linie durch zwei unterschiedliche Werte "tot" ist, trägt sie 0 bei -
+    genau wie bei score_board(). Für ein vollständiges Board ist das Ergebnis
+    identisch zu score_board() (jede Linie ist dann entweder komplett und
+    konsistent, oder komplett und inkonsistent -> 0 in beiden Funktionen).
+
+    Grundlage für Potential-based Reward Shaping (siehe env.py,
+    reward_shaping=True): Φ(board) = potential_score(board),
+    F(s,a,s') = Φ(s') - Φ(s). Policy-invariant nach Ng et al. (1999), da rein
+    additiv zum ursprünglichen Reward - ändert die optimale Policy nicht,
+    macht aber jeden Zug statt nur den letzten informativ.
+    """
+    total = 0
+    for _direction, (lines, value_pos) in ALL_LINE_GROUPS.items():
+        for line in lines:
+            tiles = [board[i] for i in line if board[i] is not None]
+            if not tiles:
+                continue
+            values = [t[value_pos] for t in tiles]
+            if len(set(values)) == 1:
+                total += values[0] * len(tiles)
+    return total
+
+
 # ---------------------------------------------------------------------------
 # Kleine Selbsttests (führe `python game.py` aus, um zu prüfen)
 # ---------------------------------------------------------------------------
@@ -159,6 +188,24 @@ if __name__ == "__main__":
     # Score pro Richtung = 19 * Wert (jede Kachel zählt einmal je Richtung)
     expected = 19 * 9 + 19 * 8 + 19 * 7
     assert total == expected, f"Erwartet {expected}, bekommen {total}"
+
+    # potential_score()-Tests: leeres Board -> 0, volles Board -> identisch zu
+    # score_board() (egal ob Zufalls-Board oder alle-gleich-Board)
+    assert potential_score(empty_board) == 0
+    assert potential_score(test_board) == score_board(test_board)[0]
+    assert potential_score(same_tile_board) == score_board(same_tile_board)[0]
+    # Teilweise gefülltes Board (Felder 0+1 belegt, Rest leer): jedes Feld
+    # trägt zu 3 Linien bei (eine je Richtung), auch wenn diese noch nicht
+    # komplett sind - senkrecht (Linie [0,1,2], beide Felder Wert 5) trägt
+    # 2*5, die restlichen 4 Linien haben je nur 1 Feld gelegt und tragen
+    # Wert*1 bei: links-diag von Feld 0 (3*1) und Feld 1 (4*1), rechts-diag
+    # von Feld 0 (2*1) und Feld 1 (6*1). Summe von Hand nachgerechnet: 25.
+    partial_board = [None] * NUM_CELLS
+    partial_board[0] = (5, 3, 2)
+    partial_board[1] = (5, 4, 6)
+    partial_total = potential_score(partial_board)
+    expected_partial = 2 * 5 + 3 * 1 + 4 * 1 + 2 * 1 + 6 * 1
+    assert partial_total == expected_partial, f"Erwartet {expected_partial}, bekommen {partial_total}"
 
     print("Alle Selbsttests erfolgreich!")
     print(f"Beispiel-Deck (erste 3 Kacheln): {deck[:3]}")

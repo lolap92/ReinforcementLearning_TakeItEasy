@@ -76,8 +76,28 @@ python train_ppo.py --timesteps 1000000 --n-envs 8   # 8 Environments parallel
 | `--n-steps` | int | `max(32, 512 // n_envs)` | Rollout-Länge pro Environment vor jedem Policy-Update. Wird automatisch mit `n_envs` runterskaliert, damit die Anzahl Policy-Updates bei mehr parallelen Envs nicht einbricht – ein 1-Mio.-Lauf mit `n_envs=8` und unverändertem `n_steps=512` hatte nur noch 1/8 so viele Updates und schnitt dadurch schlechter ab (92,8 → 83,4 Mean-Score) |
 | `--no-normalize` | flag | aus | Schaltet die Reward-Normalisierung (`VecNormalize`, nur Reward, nicht Observation) ab, die standardmäßig an ist |
 | `--constant-lr` | flag | aus | Konstante Lernrate (3e-4) statt des linear auf 0 abfallenden Default-Schedules |
+| `--reward-shaping` | flag | aus | Potential-based Reward Shaping (siehe `env.py`) – gibt bei jedem Zug statt nur im letzten ein Lernsignal, bleibt aber policy-invariant (Ng et al. 1999). Wirkt nur auf das Training; `eval/mean_reward` und die finale Auswertung nutzen immer den echten, ungeshapten Score. Mit Shaping ist `rollout/score_mean` in TensorBoard rechnerisch ~2× der echten Score-Größenordnung – kein Bug |
 
 Weitere Default-Änderungen ggü. dem ursprünglichen Phase-6-Stand: Value-Function jetzt größer als die Policy (`net_arch={"pi": [128,128], "vf": [256,256]}`), da sie mit dem Sparse-Reward die schwerere Lernaufgabe hat.
+
+### Hyperparameter-Sweep
+
+Statt eine Konfiguration zu erraten und dafür gleich Millionen Steps zu
+investieren, testet `sweep_ppo.py` mehrere Konfigurationen bei kleinem,
+gemeinsamem Budget gegeneinander (mehrere Seeds je Konfiguration, um
+Lauf-zu-Lauf-Streuung nicht mit echten Unterschieden zu verwechseln):
+
+```bash
+python sweep_ppo.py
+python sweep_ppo.py --timesteps 200000 --seeds 0 1 2
+python sweep_ppo.py --configs baseline reward_shaping   # nur diese testen
+```
+
+Ruft `train_ppo.py` je Kombination aus Konfiguration × Seed per Subprocess
+auf, jeder Einzellauf landet normal unter `experiments/<run_id>/` und in
+`EXPERIMENTS.md`; am Ende druckt das Skript eine nach Mittelwert sortierte
+Rangliste. Die Gewinner-Konfiguration danach mit deutlich mehr `--timesteps`
+final trainieren.
 
 Beide Skripte legen ihre Ergebnisse unter `experiments/<run_id>/` ab
 (`run_id` = Zeitstempel + `--tag`): `config.json`/`summary.json` (git-tracked,

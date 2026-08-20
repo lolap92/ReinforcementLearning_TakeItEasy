@@ -12,24 +12,30 @@ Design-Entscheidungen (bewusst einfach gehalten für den Lernstart):
   - Action: Discrete(19) - Index des Feldes, auf das die aktuelle Kachel
     gelegt wird. Bereits belegte Felder sind ungültig -> Action Masking
     (siehe get_action_mask), relevant für MaskablePPO in Phase 6.
-  - Reward: 0 nach jedem Zug, kompletter Score erst im letzten Schritt
-    (Sparse Reward - genau das macht Credit Assignment interessant).
-    Alternative (Reward Shaping) besprechen wir separat in Phase 5/6.
+  - Reward: standardmäßig 0 nach jedem Zug, kompletter Score erst im letzten
+    Schritt (Sparse Reward - genau das macht Credit Assignment interessant).
+    Opt-in Alternative: reward_shaping=True (siehe __init__) gibt zusätzlich
+    bei jedem Zug ein Potential-based-Shaping-Signal (Ng et al. 1999) über
+    game.py's potential_score() aus - policy-invariant, ändert die optimale
+    Policy nicht, macht aber jeden Zug statt nur den letzten informativ.
+    Default bleibt False, damit sich am bisherigen Verhalten nichts ändert.
 """
 
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
-from game import build_deck, score_board, NUM_CELLS, ROWS
+from game import build_deck, score_board, potential_score, NUM_CELLS, ROWS
 
 
 class TakeItEasyEnv(gym.Env):
     metadata = {"render_modes": ["human"]}
 
-    def __init__(self, render_mode=None):
+    def __init__(self, render_mode=None, reward_shaping=False):
         super().__init__()
         self.render_mode = render_mode
+        self.reward_shaping = reward_shaping
+        self._potential = 0.0
 
         # Action: welches der 19 Felder wird mit der aktuellen Kachel belegt
         self.action_space = spaces.Discrete(NUM_CELLS)
@@ -59,6 +65,7 @@ class TakeItEasyEnv(gym.Env):
         self.np_random.shuffle(self.deck)  # nutzt den geseedeten RNG von gym.Env
         self.step_count = 0
         self.current_tile = self.deck.pop()
+        self._potential = 0.0  # potential_score() eines leeren Boards ist immer 0
 
         observation = self._get_obs()
         info = {"action_mask": self._get_action_mask()}
@@ -70,6 +77,7 @@ class TakeItEasyEnv(gym.Env):
             # sollte das nie passieren - hier trotzdem sauber abgefangen,
             # damit die Env auch ohne Masking (z.B. simples DQN) nutzbar ist:
             # harte Bestrafung + Episode läuft weiter mit gleicher Kachel.
+            # Board ändert sich nicht -> Potential unverändert, kein Shaping nötig.
             return self._get_obs(), -10.0, False, False, {
                 "action_mask": self._get_action_mask(),
                 "invalid_action": True,
@@ -87,6 +95,11 @@ class TakeItEasyEnv(gym.Env):
             self.current_tile = None
         else:
             self.current_tile = self.deck.pop()
+
+        if self.reward_shaping:
+            new_potential = potential_score(self.board)
+            reward += new_potential - self._potential
+            self._potential = new_potential
 
         observation = self._get_obs()
         info = {"action_mask": self._get_action_mask()}

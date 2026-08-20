@@ -46,6 +46,17 @@ Phase-6-Version:
   - Größere Value-Function (vf=[256,256] statt [128,128]) - die Value-
     Function hat mit dem Sparse-Reward die schwerere Aufgabe als die Policy.
 
+"Wave 2": --reward-shaping (Default aus). Potential-based Reward Shaping
+(siehe env.py) gibt bei jedem Zug statt nur im letzten ein Lernsignal, bleibt
+aber laut Ng et al. (1999) policy-invariant. Wirkt NUR auf train_env -
+eval_env (für eval/mean_reward) und evaluate() (finale Auswertung/
+summary.json) nutzen immer den echten, ungeshapten Score, damit Läufe mit/
+ohne Shaping vergleichbar bleiben. ACHTUNG beim TensorBoard-Ablesen:
+rollout/score_mean/min/max kommt aus dem (ggf. geshapten) Trainings-Reward -
+mit --reward-shaping ist das rechnerisch ~2x der echten Score-Größenordnung
+(siehe env.py-Docstring), kein Bug. eval/mean_reward bleibt davon unberührt
+und ist immer der echte Score.
+
     # In einem zweiten Terminal, um live mitzuverfolgen:
     tensorboard --logdir experiments
     # dann im Browser: http://localhost:6006
@@ -125,8 +136,11 @@ def git_commit_hash():
         return None
 
 
-def make_env():
-    return ActionMasker(TimeLimit(TakeItEasyEnv(), max_episode_steps=MAX_EPISODE_STEPS), mask_fn)
+def make_env(reward_shaping=False):
+    return ActionMasker(
+        TimeLimit(TakeItEasyEnv(reward_shaping=reward_shaping), max_episode_steps=MAX_EPISODE_STEPS),
+        mask_fn,
+    )
 
 
 def linear_schedule(initial_value):
@@ -195,6 +209,15 @@ if __name__ == "__main__":
         "--constant-lr", action="store_true",
         help="Konstante Lernrate (3e-4) statt des linear abfallenden Default-Schedules.",
     )
+    parser.add_argument(
+        "--reward-shaping", action="store_true",
+        help="Potential-based Reward Shaping an (siehe env.py, Docstring dort). "
+             "Default aus - Trainings-Reward bleibt dann wie bisher sparse "
+             "(nur im letzten Zug != 0). Wirkt nur auf das Training; "
+             "eval/mean_reward und die finale Auswertung (evaluate()) nutzen "
+             "immer den echten, ungeshapten Spiel-Score, damit Läufe mit und "
+             "ohne Shaping vergleichbar bleiben.",
+    )
     args = parser.parse_args()
     n_steps = args.n_steps if args.n_steps is not None else max(32, 512 // args.n_envs)
 
@@ -209,6 +232,7 @@ if __name__ == "__main__":
         n_envs=args.n_envs,
         seed=args.seed,
         vec_env_cls=SubprocVecEnv if args.n_envs > 1 else DummyVecEnv,
+        env_kwargs=dict(reward_shaping=args.reward_shaping),
     )
     if not args.no_normalize:
         # Nur Reward normalisieren, nicht die Observation (siehe Docstring) -
@@ -301,6 +325,7 @@ if __name__ == "__main__":
             "ent_coef": 0.01,
             "net_arch": net_arch,
             "reward_normalize": not args.no_normalize,
+            "reward_shaping": args.reward_shaping,
         },
         "eval_episodes": args.eval_episodes,
         "master_seed": args.seed,
