@@ -72,7 +72,12 @@ python train_ppo.py --timesteps 1000000 --n-envs 8   # 8 Environments parallel
 | `--seed` | int | `0` | Master-Seed (Trainingslauf; Eval-Episoden nutzen `seed + 1 + i`) |
 | `--tag` | str | `phase6_maskable_ppo` | Freitext, wird Teil des Run-Ordner-Namens unter `experiments/` |
 | `--device` | str | `cpu` | `cpu` (Default), `cuda` (GPU erzwingen) oder `auto` (SB3 wählt) – gleicher Hinweis wie bei DQN |
-| `--n-envs` | int | `1` | Anzahl paralleler Trainings-Environments. `1` = wie bisher ein einzelner Prozess; `>1` läuft über separate Prozesse (`SubprocVecEnv`) – vielfältigere, weniger korrelierte Trajektorien pro Policy-Update und bessere CPU-Auslastung. Achtung: Gesamt-Batchgröße pro Update ist dann `n_steps * n_envs`, nicht mehr nur `n_steps` |
+| `--n-envs` | int | `1` | Anzahl paralleler Trainings-Environments. `1` = wie bisher ein einzelner Prozess; `>1` läuft über separate Prozesse (`SubprocVecEnv`) – vielfältigere, weniger korrelierte Trajektorien pro Policy-Update und bessere CPU-Auslastung. Achtung: Gesamt-Batchgröße pro Update ist `n_steps * n_envs` |
+| `--n-steps` | int | `max(32, 512 // n_envs)` | Rollout-Länge pro Environment vor jedem Policy-Update. Wird automatisch mit `n_envs` runterskaliert, damit die Anzahl Policy-Updates bei mehr parallelen Envs nicht einbricht – ein 1-Mio.-Lauf mit `n_envs=8` und unverändertem `n_steps=512` hatte nur noch 1/8 so viele Updates und schnitt dadurch schlechter ab (92,8 → 83,4 Mean-Score) |
+| `--no-normalize` | flag | aus | Schaltet die Reward-Normalisierung (`VecNormalize`, nur Reward, nicht Observation) ab, die standardmäßig an ist |
+| `--constant-lr` | flag | aus | Konstante Lernrate (3e-4) statt des linear auf 0 abfallenden Default-Schedules |
+
+Weitere Default-Änderungen ggü. dem ursprünglichen Phase-6-Stand: Value-Function jetzt größer als die Policy (`net_arch={"pi": [128,128], "vf": [256,256]}`), da sie mit dem Sparse-Reward die schwerere Lernaufgabe hat.
 
 Beide Skripte legen ihre Ergebnisse unter `experiments/<run_id>/` ab
 (`run_id` = Zeitstempel + `--tag`): `config.json`/`summary.json` (git-tracked,

@@ -25,9 +25,26 @@ mehrere Environments gleichzeitig statt nur einer - das gibt pro Policy-
 Update vielfältigere, weniger korrelierte Trajektorien (stabilere Advantage-
 Schätzung) und nutzt mehrere CPU-Kerne parallel aus (relevant, weil hier laut
 --device-Hinweis unten ohnehin meist auf CPU trainiert wird). Ab n-envs > 1
-werden die Environments über separate Prozesse (SubprocVecEnv) parallelisiert
-- Vorsicht: Gesamt-Batchgröße pro Update ist dann n_steps * n_envs, nicht mehr
-nur n_steps.
+werden die Environments über separate Prozesse (SubprocVecEnv) parallelisiert.
+
+Wichtig, sonst Falle: Gesamt-Batchgröße pro Update ist n_steps * n_envs. Ein
+1-Mio.-Lauf mit n_envs=8 und unverändertem n_steps=512 hat deshalb nur noch
+1/8 so viele Policy-Updates wie derselbe Lauf mit n_envs=1 - das hat in der
+Praxis das Ergebnis verschlechtert (92,81 -> 83,35 Mean-Score, siehe Chat-
+Analyse), obwohl "mehr Environments" nach einer reinen Verbesserung klingt.
+--n-steps wird deshalb standardmäßig automatisch mit n_envs runterskaliert
+(siehe --n-steps unten), um die Update-Anzahl ungefähr zu erhalten.
+
+Weitere "Wave 1"-Optimierungen (siehe Chat) gegenüber der ursprünglichen
+Phase-6-Version:
+  - Reward-Normalisierung (VecNormalize, nur Reward, nicht Observation) -
+    der Score bis 307 bei gamma=1.0 ist ein großskaliges, hochvariantes
+    Zielsignal für die Value-Function; norm_obs bleibt bewusst aus, damit es
+    keine Diskrepanz zwischen Trainings- und Eval-/Replay-Normalisierung
+    geben kann (replay.py/evaluate() nutzen immer die rohe Environment).
+  - Linear abfallende statt konstanter Lernrate (--constant-lr zum Abschalten).
+  - Größere Value-Function (vf=[256,256] statt [128,128]) - die Value-
+    Function hat mit dem Sparse-Reward die schwerere Aufgabe als die Policy.
 
     # In einem zweiten Terminal, um live mitzuverfolgen:
     tensorboard --logdir experiments
@@ -58,7 +75,7 @@ from sb3_contrib.common.maskable.callbacks import MaskableEvalCallback
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 
 from env import TakeItEasyEnv, NUM_CELLS
 
@@ -112,6 +129,14 @@ def make_env():
     return ActionMasker(TimeLimit(TakeItEasyEnv(), max_episode_steps=MAX_EPISODE_STEPS), mask_fn)
 
 
+def linear_schedule(initial_value):
+    """SB3-Lernraten-Schedule: linear von initial_value auf 0 über den
+    gesamten Trainingslauf (progress_remaining läuft von 1.0 auf 0.0)."""
+    def schedule(progress_remaining):
+        return progress_remaining * initial_value
+    return schedule
+
+
 def evaluate(model, n_episodes, seed):
     env = TakeItEasyEnv()
     scores = np.empty(n_episodes)
@@ -155,7 +180,23 @@ if __name__ == "__main__":
              "1 = wie bisher (ein einzelner Prozess), >1 = separate Prozesse "
              "(SubprocVecEnv) - mehr Kerne genutzt, aber auch mehr RAM/Overhead.",
     )
+    parser.add_argument(
+        "--n-steps", type=int, default=None,
+        help="Rollout-Länge pro Environment vor jedem Policy-Update. Default: "
+             "automatisch max(32, 512 // n_envs), damit die Anzahl Updates bei "
+             "mehr n_envs nicht einbricht (siehe Docstring/Chat-Analyse) - "
+             "explizit setzen, um das zu überschreiben.",
+    )
+    parser.add_argument(
+        "--no-normalize", action="store_true",
+        help="Reward-Normalisierung (VecNormalize) abschalten (Default: an).",
+    )
+    parser.add_argument(
+        "--constant-lr", action="store_true",
+        help="Konstante Lernrate (3e-4) statt des linear abfallenden Default-Schedules.",
+    )
     args = parser.parse_args()
+    n_steps = args.n_steps if args.n_steps is not None else max(32, 512 // args.n_envs)
 
     timestamp = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
     run_id = f"{timestamp[:16].replace(':', '').replace('T', '_')}_{args.tag}"
@@ -169,25 +210,35 @@ if __name__ == "__main__":
         seed=args.seed,
         vec_env_cls=SubprocVecEnv if args.n_envs > 1 else DummyVecEnv,
     )
+    if not args.no_normalize:
+        # Nur Reward normalisieren, nicht die Observation (siehe Docstring) -
+        # so kann evaluate()/replay.py weiter unverändert die rohe
+        # Environment nutzen, ohne gespeicherte Normalisierungs-Statistiken
+        # laden zu müssen.
+        train_env = VecNormalize(train_env, norm_obs=False, norm_reward=True, gamma=1.0)
     eval_env = Monitor(make_env())
+
+    learning_rate = 3e-4 if args.constant_lr else linear_schedule(3e-4)
+    net_arch = dict(pi=[128, 128], vf=[256, 256])
 
     model = MaskablePPO(
         "MlpPolicy",
         train_env,
-        learning_rate=3e-4,
-        n_steps=512,
+        learning_rate=learning_rate,
+        n_steps=n_steps,
         batch_size=64,
         n_epochs=10,
         gamma=1.0,  # keine Abzinsung - die Zielgröße ist der Score am Episodenende, alle 19 Züge zählen gleich (wie bei DQN, siehe train_dqn.py)
         gae_lambda=0.95,
         ent_coef=0.01,
-        policy_kwargs=dict(net_arch=[128, 128]),
+        policy_kwargs=dict(net_arch=net_arch),
         tensorboard_log=str(run_dir / "tensorboard"),
         seed=args.seed,
         device=args.device,
         verbose=1,
     )
     print(f"Gewähltes Device: {model.device}")
+    print(f"n_steps={n_steps} (n_envs={args.n_envs}, Batch/Update={n_steps * args.n_envs})")
 
     eval_callback = MaskableEvalCallback(
         eval_env,
@@ -241,14 +292,15 @@ if __name__ == "__main__":
         "algorithm": "MaskablePPO (sb3-contrib)",
         "hyperparameters": {
             "timesteps": args.timesteps,
-            "learning_rate": 3e-4,
-            "n_steps": 512,
+            "learning_rate": "constant(3e-4)" if args.constant_lr else "linear(3e-4 -> 0)",
+            "n_steps": n_steps,
             "batch_size": 64,
             "n_epochs": 10,
             "gamma": 1.0,
             "gae_lambda": 0.95,
             "ent_coef": 0.01,
-            "net_arch": [128, 128],
+            "net_arch": net_arch,
+            "reward_normalize": not args.no_normalize,
         },
         "eval_episodes": args.eval_episodes,
         "master_seed": args.seed,
