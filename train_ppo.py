@@ -267,13 +267,25 @@ if __name__ == "__main__":
         vec_env_cls=SubprocVecEnv if args.n_envs > 1 else DummyVecEnv,
         env_kwargs=dict(reward_shaping=args.reward_shaping),
     )
+    eval_env = Monitor(make_env())
     if not args.no_normalize:
         # Nur Reward normalisieren, nicht die Observation (siehe Docstring) -
         # so kann evaluate()/replay.py weiter unverändert die rohe
         # Environment nutzen, ohne gespeicherte Normalisierungs-Statistiken
         # laden zu müssen.
         train_env = VecNormalize(train_env, norm_obs=False, norm_reward=True, gamma=1.0)
-    eval_env = Monitor(make_env())
+        # MaskableEvalCallback ruft bei jedem Eval sync_envs_normalization()
+        # auf, die verlangt, dass eval_env genauso gewrappt ist wie train_env
+        # (sonst AssertionError beim ersten Eval-Checkpoint, standardmäßig bei
+        # Step 10k). norm_obs=False/norm_reward=False + training=False machen
+        # das hier zu einem reinen Passthrough-Wrapper - eval/mean_reward
+        # bleibt der echte Score.
+        eval_env = VecNormalize(
+            DummyVecEnv([lambda: eval_env]),
+            norm_obs=False,
+            norm_reward=False,
+            training=False,
+        )
 
     learning_rate = 3e-4 if args.constant_lr else linear_schedule(3e-4)
     net_arch = dict(pi=[128, 128], vf=[256, 256])
