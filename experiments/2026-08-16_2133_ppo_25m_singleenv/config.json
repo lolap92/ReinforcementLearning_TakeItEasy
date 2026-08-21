@@ -1,6 +1,6 @@
 {
-  "run_id": "2026-08-16_2133_phase6_maskable_ppo",
-  "tag": "phase6_maskable_ppo",
+  "run_id": "2026-08-16_2133_ppo_25m_singleenv",
+  "tag": "ppo_25m_singleenv",
   "timestamp": "2026-08-16T21:33:37+02:00",
   "git_commit": "6e167f0",
   "env": "TakeItEasyEnv",

@@ -209,12 +209,27 @@ def evaluate(model, n_episodes, seed):
     return scores, invalid_counts
 
 
+def steps_label(n):
+    """Kurzform für Timesteps in Tags/Run-IDs, z.B. 300_000 -> '300k', 1_000_000 -> '1m'."""
+    if n % 1_000_000 == 0:
+        return f"{n // 1_000_000}m"
+    if n % 1_000 == 0:
+        return f"{n // 1000}k"
+    return str(n)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DQN-Training für Take It Easy (Phase 5, lokal ausführen).")
     parser.add_argument("--timesteps", type=int, default=300_000)
     parser.add_argument("--eval-episodes", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--tag", type=str, default="phase5_dqn_masked")
+    parser.add_argument(
+        "--tag", type=str, default=None,
+        help="Freitext für den Run-Ordner-Namen. Default: automatisch aus den "
+             "Settings gebaut (z.B. 'dqn_300k_masked'), damit Steps/Modus/"
+             "Besonderheiten aus dem Namen hervorgehen, ohne dass man selbst "
+             "daran denken muss.",
+    )
     parser.add_argument(
         "--device", type=str, default="cpu",
         help="'cpu' (Default), 'cuda' (GPU erzwingen) oder 'auto' (SB3 wählt). "
@@ -224,6 +239,8 @@ if __name__ == "__main__":
              "aber auch nicht.",
     )
     args = parser.parse_args()
+    if args.tag is None:
+        args.tag = f"dqn_{steps_label(args.timesteps)}_masked"
 
     timestamp = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
     run_id = f"{timestamp[:16].replace(':', '').replace('T', '_')}_{args.tag}"

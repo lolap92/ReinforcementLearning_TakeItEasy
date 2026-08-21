@@ -1,12 +1,12 @@
 {
-  "run_id": "2026-08-16_1227_phase5_dqn_masked",
-  "tag": "phase5_dqn_masked",
-  "timestamp": "2026-08-16T12:27:18+02:00",
-  "git_commit": "81aa006",
+  "run_id": "2026-08-16_0738_dqn_1m_unmasked_diverged",
+  "tag": "dqn_1m_unmasked_diverged",
+  "timestamp": "2026-08-16T07:38:00+02:00",
+  "git_commit": "1b40674",
   "env": "TakeItEasyEnv",
-  "algorithm": "DQN (stable-baselines3, mit Action Masking)",
+  "algorithm": "DQN (stable-baselines3, ohne Action Masking)",
   "hyperparameters": {
-    "timesteps": 300000,
+    "timesteps": 1000000,
     "learning_rate": 0.0005,
     "buffer_size": 100000,
     "learning_starts": 1000,

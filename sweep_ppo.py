@@ -48,8 +48,19 @@ CONFIGS = {
 }
 
 
+def steps_label(n):
+    """Kurzform für Timesteps in Tags/Run-IDs, z.B. 300_000 -> '300k', 1_000_000 -> '1m'."""
+    if n % 1_000_000 == 0:
+        return f"{n // 1_000_000}m"
+    if n % 1_000 == 0:
+        return f"{n // 1000}k"
+    return str(n)
+
+
 def run_one(config_name, extra_args, seed, timesteps, eval_episodes, device, n_envs):
-    tag = f"sweep_{config_name}"
+    # Tag enthält Steps + Seed, damit jeder Sweep-Einzellauf im Ordnernamen
+    # eindeutig und selbsterklärend ist (z.B. sweep_reward_shaping_200k_seed1).
+    tag = f"sweep_{config_name}_{steps_label(timesteps)}_seed{seed}"
     before = {p.name for p in EXPERIMENTS_DIR.glob(f"*_{tag}")} if EXPERIMENTS_DIR.exists() else set()
 
     cmd = [

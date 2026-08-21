@@ -54,7 +54,7 @@ python train_dqn.py --timesteps 1000000 --device cuda --tag mein_lauf
 | `--timesteps` | int | `300000` | Anzahl Environment-Steps zum Trainieren |
 | `--eval-episodes` | int | `1000` | Anzahl Episoden für die finale Auswertung nach dem Training |
 | `--seed` | int | `0` | Master-Seed (Trainingslauf; Eval-Episoden nutzen `seed + 1 + i`) |
-| `--tag` | str | `phase5_dqn_masked` | Freitext, wird Teil des Run-Ordner-Namens unter `experiments/` |
+| `--tag` | str | automatisch (z.B. `dqn_300k_masked`) | Freitext, wird Teil des Run-Ordner-Namens unter `experiments/`. Ohne eigenen Wert wird er aus den Settings gebaut, damit Steps/Modus direkt aus dem Namen hervorgehen |
 | `--device` | str | `cpu` | `cpu` (Default), `cuda` (GPU erzwingen) oder `auto` (SB3 wählt). Bei diesem kleinen Netz (128,128) ist der Flaschenhals meist der CPU-seitige Env-Step, GPU bringt oft wenig |
 
 ### MaskablePPO
@@ -70,7 +70,7 @@ python train_ppo.py --timesteps 1000000 --n-envs 8   # 8 Environments parallel
 | `--timesteps` | int | `300000` | Anzahl Environment-Steps zum Trainieren |
 | `--eval-episodes` | int | `1000` | Anzahl Episoden für die finale Auswertung nach dem Training |
 | `--seed` | int | `0` | Master-Seed (Trainingslauf; Eval-Episoden nutzen `seed + 1 + i`) |
-| `--tag` | str | `phase6_maskable_ppo` | Freitext, wird Teil des Run-Ordner-Namens unter `experiments/` |
+| `--tag` | str | automatisch (z.B. `ppo_1m_8envs_rewardshaping`) | Freitext, wird Teil des Run-Ordner-Namens unter `experiments/`. Ohne eigenen Wert wird er aus Steps, `n_envs` und allen vom Default abweichenden Wave-1/2-Flags gebaut |
 | `--device` | str | `cpu` | `cpu` (Default), `cuda` (GPU erzwingen) oder `auto` (SB3 wählt) – gleicher Hinweis wie bei DQN |
 | `--n-envs` | int | `1` | Anzahl paralleler Trainings-Environments. `1` = wie bisher ein einzelner Prozess; `>1` läuft über separate Prozesse (`SubprocVecEnv`) – vielfältigere, weniger korrelierte Trajektorien pro Policy-Update und bessere CPU-Auslastung. Achtung: Gesamt-Batchgröße pro Update ist `n_steps * n_envs` |
 | `--n-steps` | int | `max(32, 512 // n_envs)` | Rollout-Länge pro Environment vor jedem Policy-Update. Wird automatisch mit `n_envs` runterskaliert, damit die Anzahl Policy-Updates bei mehr parallelen Envs nicht einbricht – ein 1-Mio.-Lauf mit `n_envs=8` und unverändertem `n_steps=512` hatte nur noch 1/8 so viele Updates und schnitt dadurch schlechter ab (92,8 → 83,4 Mean-Score) |

@@ -174,12 +174,43 @@ def evaluate(model, n_episodes, seed):
     return scores, invalid_counts
 
 
+def steps_label(n):
+    """Kurzform für Timesteps in Tags/Run-IDs, z.B. 300_000 -> '300k', 1_000_000 -> '1m'."""
+    if n % 1_000_000 == 0:
+        return f"{n // 1_000_000}m"
+    if n % 1_000 == 0:
+        return f"{n // 1000}k"
+    return str(n)
+
+
+def build_default_tag(args, n_steps):
+    """Baut aus den tatsächlichen Settings einen selbsterklärenden Tag, z.B.
+    'ppo_1m_8envs_rewardshaping' - Steps, n_envs und alle vom Default
+    abweichenden Wave-1/2-Flags gehen direkt aus dem Namen hervor."""
+    parts = [f"ppo_{steps_label(args.timesteps)}_{args.n_envs}envs"]
+    if args.n_steps is not None:
+        parts.append(f"nsteps{n_steps}")
+    if args.reward_shaping:
+        parts.append("rewardshaping")
+    if args.constant_lr:
+        parts.append("constlr")
+    if args.no_normalize:
+        parts.append("nonorm")
+    return "_".join(parts)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MaskablePPO-Training für Take It Easy (Phase 6, lokal ausführen).")
     parser.add_argument("--timesteps", type=int, default=300_000)
     parser.add_argument("--eval-episodes", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--tag", type=str, default="phase6_maskable_ppo")
+    parser.add_argument(
+        "--tag", type=str, default=None,
+        help="Freitext für den Run-Ordner-Namen. Default: automatisch aus den "
+             "Settings gebaut (z.B. 'ppo_1m_8envs_rewardshaping'), damit Steps/"
+             "Modus/Besonderheiten aus dem Namen hervorgehen, ohne dass man "
+             "selbst daran denken muss.",
+    )
     parser.add_argument(
         "--device", type=str, default="cpu",
         help="'cpu' (Default), 'cuda' (GPU erzwingen) oder 'auto' (SB3 wählt). "
@@ -220,6 +251,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     n_steps = args.n_steps if args.n_steps is not None else max(32, 512 // args.n_envs)
+    if args.tag is None:
+        args.tag = build_default_tag(args, n_steps)
 
     timestamp = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
     run_id = f"{timestamp[:16].replace(':', '').replace('T', '_')}_{args.tag}"

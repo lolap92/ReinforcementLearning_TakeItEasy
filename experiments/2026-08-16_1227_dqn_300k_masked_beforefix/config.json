@@ -1,8 +1,8 @@
 {
-  "run_id": "2026-08-16_2108_phase5_dqn_masked",
-  "tag": "phase5_dqn_masked",
-  "timestamp": "2026-08-16T21:08:05+02:00",
-  "git_commit": "aa354ee",
+  "run_id": "2026-08-16_1227_dqn_300k_masked_beforefix",
+  "tag": "dqn_300k_masked_beforefix",
+  "timestamp": "2026-08-16T12:27:18+02:00",
+  "git_commit": "81aa006",
   "env": "TakeItEasyEnv",
   "algorithm": "DQN (stable-baselines3, mit Action Masking)",
   "hyperparameters": {
@@ -22,6 +22,5 @@
     ]
   },
   "eval_episodes": 1000,
-  "master_seed": 0,
-  "device": "cpu"
+  "master_seed": 0
 }
