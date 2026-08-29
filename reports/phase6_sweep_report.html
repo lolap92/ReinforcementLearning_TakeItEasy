@@ -148,35 +148,45 @@
         <div class="swatch-big" style="background:var(--c-baseline)"></div>
         <div>
           <h3>baseline</h3>
-          <p>Alle "Wave 1"-Defaults, sonst nichts extra: Reward-Normalisierung (<code>VecNormalize</code>) an, Lernrate linear von 3e-4 auf 0 abfallend, größere Value-Function (<code>vf=[256,256]</code>), 1 Environment. Der Referenzpunkt, gegen den alle anderen Zeilen laufen.</p>
+          <p>Alle "Wave 1"-Defaults, sonst nichts extra: Reward-Normalisierung (<code>VecNormalize</code>) an, Lernrate linear von 3e-4 auf 0 abfallend, größere Value-Function (<code>vf=[256,256]</code> statt <code>[128,128]</code>), 1 Environment. Der Referenzpunkt, gegen den alle anderen Zeilen laufen – eigentlich ein Bündel aus drei Einzeltechniken.</p>
+          <p><strong>Normalerweise nutzt man das für:</strong> Reward-Normalisierung, weil Policy-Gradient-/Actor-Critic-Verfahren empfindlich auf die absolute Größenordnung des Rewards reagieren – ein Value-Loss, der quadratisch mit dem Reward skaliert, kann bei sehr großen oder sehr spitzen Rewards das Lernen destabilisieren, bevor sich das Netz überhaupt kalibriert hat. Einen abfallenden Lernraten-Schedule, weil man am Trainingsanfang große Schritte will, um schnell von der zufälligen Initialisierung wegzukommen, aber späte, kleinere Schritte, damit eine bereits gute Policy nicht wieder aus einem guten Optimum herausgeschubst wird. Eine größere Value-Function, weil in Actor-Critic-Methoden die Qualität des Policy-Gradienten direkt von der Qualität der Advantage-Schätzung abhängt – eine zu kleine, ungenaue Value-Function macht indirekt auch die Policy instabil, ähnlich einem schlecht kalibrierten Prüfer, der einen Schüler in die falsche Richtung lenkt.</p>
+          <p><strong>Was das hier konkret verändert:</strong> Unser Reward ist extrem spitz (0 in 18 von 19 Zügen, dann bis zu ~300 am Schluss) – genau das Szenario, für das Reward-Normalisierung gemacht ist. Die Value-Function muss aus einem Halb-Board einen sehr hochvarianten Zielwert vorhersagen; mehr Kapazität (256 statt 128 Neuronen je Schicht) sollte ihr dabei helfen, ohne dass sich an der Policy-Netzgröße etwas ändert.</p>
         </div>
       </div>
       <div class="setting">
         <div class="swatch-big" style="background:var(--c-shaping)"></div>
         <div>
           <h3>reward_shaping</h3>
-          <p>Wie baseline, zusätzlich <code>--reward-shaping</code>: bei jedem Zug gibt es ein Potential-based-Shaping-Signal (Ng et al. 1999) statt nur ganz am Ende – policy-invariant, sollte dem Netz aber leichter machen, frühe Züge zu bewerten.</p>
+          <p>Wie baseline, zusätzlich <code>--reward-shaping</code>: bei jedem Zug gibt es ein Potential-based-Shaping-Signal statt nur ganz am Ende.</p>
+          <p><strong>Normalerweise nutzt man das für:</strong> das Credit-Assignment-Problem in Sparse-Reward-Umgebungen. Kommt der einzige "echte" Reward erst nach vielen Schritten, muss der Agent aus einer einzigen Zahl am Episodenende rückwirkend herausrechnen, welche seiner Entscheidungen dazu beigetragen haben – ein schweres Zuordnungsproblem, besonders früh im Training, wenn fast alle Trajektorien noch zufällig sind. Potential-based Shaping (Ng, Harada &amp; Russell, 1999) löst das, indem es aus einer Heuristik Φ(Zustand) bei jedem Übergang ein Zwischensignal F(s,a,s')=γΦ(s')-Φ(s) erzeugt – beweisbar, ohne dabei zu ändern, welche Policy am Ende optimal ist.</p>
+          <p><strong>Was das hier konkret verändert:</strong> Φ ist <code>potential_score()</code> aus <code>game.py</code> – bewertet, wie viele "lebendige" (noch konsistente) Teil-Linien das aktuelle Board hat, gewichtet nach deren Länge. Ein Zug, der eine Linie am Leben hält oder verlängert, gibt sofort ein kleines Plus; ein Zug, der eine Linie "killt" (zwei unterschiedliche Werte in dieselbe Richtung legt), sofort ein Minus – statt dass der Agent das erst nach dem 19. und letzten Zug erfährt. Der Agent bekommt also bei jedem einzelnen Zug ein Lernsignal statt nur einmal pro Episode.</p>
         </div>
       </div>
       <div class="setting">
         <div class="swatch-big" style="background:var(--c-constlr)"></div>
         <div>
           <h3>constant_lr</h3>
-          <p>Wie baseline, aber <code>--constant-lr</code>: konstante Lernrate 3e-4 statt des linearen Abfalls auf 0. Testet, ob der Wave-1-Schedule bei diesem kurzen Budget überhaupt etwas bringt oder das Training nur unnötig verlangsamt.</p>
+          <p>Wie baseline, aber <code>--constant-lr</code>: konstante Lernrate 3e-4 statt des linearen Abfalls auf 0.</p>
+          <p><strong>Normalerweise nutzt man das für:</strong> eine Ablationsstudie, keine eigenständige "Verbesserungs"-Technik – man deaktiviert gezielt eine Komponente, um zu messen, ob sie tatsächlich etwas beiträgt oder nur zusätzliche Komplexität ohne Nutzen ist. LR-Decay lohnt sich typischerweise vor allem bei langen Trainingsläufen, bei denen die Policy tatsächlich in die Nähe eines guten Optimums kommt und Feinschliff braucht; bei kurzen Läufen kann Decay sogar schaden, weil die Lernrate schon spürbar gesunken ist, bevor überhaupt genug gelernt wurde.</p>
+          <p><strong>Was das hier konkret verändert:</strong> Über die vollen 200.000 Steps bleiben Policy- und Value-Updates gleich groß, statt zum Ende hin kleiner zu werden – die Policy "bremst" nicht ab, sondern lernt bis zum letzten Update mit voller Schrittweite. Testet, ob der Wave-1-Schedule bei diesem kurzen Budget überhaupt greift oder das Training nur unnötig verlangsamt, bevor Decay etwas bringen könnte.</p>
         </div>
       </div>
       <div class="setting">
         <div class="swatch-big" style="background:var(--c-nonorm)"></div>
         <div>
           <h3>no_normalize</h3>
-          <p>Wie baseline, aber <code>--no-normalize</code>: keine Reward-Normalisierung. Testet, ob <code>VecNormalize</code> bei diesem Budget tatsächlich hilft oder nur zusätzliche Komplexität ohne Nutzen ist.</p>
+          <p>Wie baseline, aber <code>--no-normalize</code>: keine Reward-Normalisierung, der Agent sieht den rohen Score-Reward direkt.</p>
+          <p><strong>Normalerweise nutzt man das für:</strong> ebenfalls eine Ablation. <code>VecNormalize</code> schätzt seine Statistik (laufender Mittelwert/Standardabweichung der Returns) erst im Laufe des Trainings anhand der bisher gesehenen Episoden. In der Anfangsphase, wenn diese Schätzung noch auf wenigen Beobachtungen beruht, kann die Normalisierung selbst zusätzliches Rauschen einbringen – der "normalisierte" Reward verschiebt sich mit, während sich die Statistik erst einpendelt, statt von Anfang an ein stabiles Signal zu liefern.</p>
+          <p><strong>Was das hier konkret verändert:</strong> testet, ob 200.000 Steps überhaupt genug Zeit sind, damit sich die Normalisierungs-Statistik einpendelt und einen Nutzen bringt, bevor das Training schon vorbei ist – oder ob der feste, unskalierte Reward bei so kurzem Budget sogar die einfachere und bessere Wahl ist.</p>
         </div>
       </div>
       <div class="setting">
         <div class="swatch-big" style="background:var(--c-nenvs4)"></div>
         <div>
           <h3>n_envs4</h3>
-          <p>Wie baseline, aber 4 parallele Environments statt 1 (<code>n_steps</code> automatisch auf 128 runterskaliert, damit die Update-Anzahl erhalten bleibt – siehe der frühere <code>n_envs=8</code>-Fehlschlag). Testet, ob Parallelisierung bei korrektem <code>n_steps</code>-Scaling tatsächlich hilft.</p>
+          <p>Wie baseline, aber 4 parallele Environments statt 1 (<code>n_steps</code> automatisch auf 128 runterskaliert, damit die Update-Anzahl erhalten bleibt – siehe der frühere <code>n_envs=8</code>-Fehlschlag, bei dem genau das nicht passiert war).</p>
+          <p><strong>Normalerweise nutzt man das für:</strong> zwei Gründe, aus denen parallele Environments Standard in modernem Deep RL sind (z. B. im Original-PPO-Paper). Erstens liefert ein einzelnes Environment eine lange, zusammenhängende Kette von Zügen aus demselben Spiel – die Stichprobe für ein Policy-Update ist dadurch stark korreliert (alles stammt aus einer einzigen Zufalls-"Geschichte"). Mehrere unabhängige Environments gleichzeitig liefern vielfältigere, weniger korrelierte Daten pro Update, was die Gradienten-Schätzung stabiler macht. Zweitens lassen sich mehrere Environments auf mehreren CPU-Kernen parallel simulieren, was die Wall-Clock-Zeit pro Trainingsschritt verkürzt.</p>
+          <p><strong>Was das hier konkret verändert:</strong> Jedes Update sammelt weiterhin 512 Zug-Beispiele (128 Steps × 4 Envs statt 512 Steps × 1 Env), aber jetzt aus 4 gleichzeitig laufenden, unabhängigen Spielen statt aus einem einzigen langen Strang – bei gleicher Update-Häufigkeit wie baseline. Testet, ob Parallelisierung bei korrektem <code>n_steps</code>-Scaling tatsächlich hilft, ohne den n_envs=8-Fehler zu wiederholen.</p>
         </div>
       </div>
     </div>
