@@ -80,6 +80,7 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 import time
 import webbrowser
 from datetime import datetime, timezone
@@ -178,24 +179,41 @@ def open_in_chrome(url):
 
 def start_tensorboard(logdir, port=6006):
     """Startet TensorBoard automatisch als Hintergrundprozess und öffnet den
-    Browser (Chrome). logdir zeigt auf experiments/ (nicht nur den aktuellen
-    Run), damit alte und neue Läufe im selben Dashboard vergleichbar
-    bleiben. Läuft auf dem Port schon ein TensorBoard (z.B. von einem
-    parallelen Training oder von sweep_ppo.py zentral gestartet), wird kein
-    zweites gestartet."""
+    Browser (Chrome) - das ist der Default, kein Opt-in. logdir zeigt auf
+    experiments/ (nicht nur den aktuellen Run), damit alte und neue Läufe im
+    selben Dashboard vergleichbar bleiben. Läuft auf dem Port schon ein
+    TensorBoard (z.B. von einem parallelen Training oder von sweep_ppo.py
+    zentral gestartet), wird kein zweites gestartet, Chrome aber trotzdem
+    geöffnet. Start über `sys.executable -m tensorboard` statt des blanken
+    "tensorboard"-Kommandos, damit es unabhängig vom PATH immer dieselbe
+    Python-Umgebung trifft, in der tensorboard laut requirements.txt
+    installiert ist (ein "tensorboard" ohne .exe im PATH schlägt sonst
+    lautlos fehl, z.B. wenn ein anderes venv aktiv ist)."""
+    url = f"http://localhost:{port}"
     if is_port_in_use(port):
-        print(f"TensorBoard läuft bereits auf http://localhost:{port} - starte kein zweites.")
+        print(f"TensorBoard läuft bereits auf {url} - starte kein zweites, öffne Chrome trotzdem.")
+        open_in_chrome(url)
         return None
     try:
+        # "-m tensorboard" (statt "tensorboard.main") schlägt bei manchen
+        # Installationen mit "package cannot be directly executed" fehl -
+        # tensorboard.main ist der stabile, dokumentierte Einstiegspunkt.
         process = subprocess.Popen(
-            ["tensorboard", "--logdir", str(logdir), "--port", str(port)],
+            [sys.executable, "-m", "tensorboard.main", "--logdir", str(logdir), "--port", str(port)],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
-    except FileNotFoundError:
-        print("TensorBoard nicht installiert (pip install tensorboard) - automatischer Start übersprungen.")
+    except OSError as e:
+        print(f"TensorBoard konnte nicht gestartet werden ({e}) - pip install tensorboard prüfen.")
         return None
-    time.sleep(2)
-    url = f"http://localhost:{port}"
+    for _ in range(15):
+        time.sleep(1)
+        if process.poll() is not None:
+            print(f"TensorBoard-Prozess ist mit Code {process.returncode} beendet - kein Start, Chrome bleibt zu.")
+            return None
+        if is_port_in_use(port):
+            break
+    else:
+        print(f"TensorBoard hat sich nach 15s nicht auf {url} gemeldet - öffne Chrome trotzdem (evtl. noch am Hochfahren).")
     print(f"TensorBoard gestartet: {url}")
     open_in_chrome(url)
     return process
