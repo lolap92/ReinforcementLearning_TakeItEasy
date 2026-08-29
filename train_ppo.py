@@ -57,9 +57,11 @@ mit --reward-shaping ist das rechnerisch ~2x der echten Score-Größenordnung
 (siehe env.py-Docstring), kein Bug. eval/mean_reward bleibt davon unberührt
 und ist immer der echte Score.
 
-    # In einem zweiten Terminal, um live mitzuverfolgen:
-    tensorboard --logdir experiments
-    # dann im Browser: http://localhost:6006
+TensorBoard startet automatisch mit (http://localhost:6006, Browser öffnet
+sich von selbst) und zeigt experiments/ komplett, nicht nur den aktuellen
+Lauf - so bleiben alte und neue Runs im selben Dashboard vergleichbar. Mit
+--no-tensorboard abschalten (z.B. wenn schon eins läuft oder für sweep_ppo.py,
+das TensorBoard selbst einmal zentral startet).
     # rollout/score_mean/min/max = Spiel-Score (nicht nur Reward) über die
     # letzten 100 Trainings-Episoden, eval/mean_reward = Score des
     # Eval-Checkpoints alle 10k Steps
@@ -74,7 +76,12 @@ Nach dem Training landet alles unter experiments/<run_id>/:
 import argparse
 import csv
 import json
+import os
+import shutil
+import socket
 import subprocess
+import time
+import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -134,6 +141,64 @@ def git_commit_hash():
         ).strip()
     except Exception:
         return None
+
+
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("localhost", port)) == 0
+
+
+def open_in_chrome(url):
+    """Öffnet die URL gezielt in Chrome statt im systemweiten Standard-
+    browser. Sucht chrome/google-chrome im PATH sowie die üblichen
+    Windows-Installationspfade; ohne Treffer Fallback auf webbrowser.open()
+    (Standardbrowser)."""
+    candidates = [
+        shutil.which("chrome"),
+        shutil.which("google-chrome"),
+        os.path.join(os.environ.get("PROGRAMFILES", r"C:\Program Files"),
+                      r"Google\Chrome\Application\chrome.exe"),
+        os.path.join(os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"),
+                      r"Google\Chrome\Application\chrome.exe"),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                      r"Google\Chrome\Application\chrome.exe"),
+    ]
+    chrome_exe = next((p for p in candidates if p and Path(p).exists()), None)
+    if chrome_exe:
+        try:
+            subprocess.Popen([chrome_exe, url])
+            return
+        except Exception:
+            pass
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+
+
+def start_tensorboard(logdir, port=6006):
+    """Startet TensorBoard automatisch als Hintergrundprozess und öffnet den
+    Browser (Chrome). logdir zeigt auf experiments/ (nicht nur den aktuellen
+    Run), damit alte und neue Läufe im selben Dashboard vergleichbar
+    bleiben. Läuft auf dem Port schon ein TensorBoard (z.B. von einem
+    parallelen Training oder von sweep_ppo.py zentral gestartet), wird kein
+    zweites gestartet."""
+    if is_port_in_use(port):
+        print(f"TensorBoard läuft bereits auf http://localhost:{port} - starte kein zweites.")
+        return None
+    try:
+        process = subprocess.Popen(
+            ["tensorboard", "--logdir", str(logdir), "--port", str(port)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        print("TensorBoard nicht installiert (pip install tensorboard) - automatischer Start übersprungen.")
+        return None
+    time.sleep(2)
+    url = f"http://localhost:{port}"
+    print(f"TensorBoard gestartet: {url}")
+    open_in_chrome(url)
+    return process
 
 
 def make_env(reward_shaping=False):
@@ -249,6 +314,16 @@ if __name__ == "__main__":
              "immer den echten, ungeshapten Spiel-Score, damit Läufe mit und "
              "ohne Shaping vergleichbar bleiben.",
     )
+    parser.add_argument(
+        "--no-tensorboard", action="store_true",
+        help="TensorBoard nicht automatisch starten (Default: an, siehe "
+             "Docstring oben). Sinnvoll wenn schon eins läuft oder von "
+             "sweep_ppo.py, das TensorBoard selbst einmal zentral startet.",
+    )
+    parser.add_argument(
+        "--tensorboard-port", type=int, default=6006,
+        help="Port für den automatischen TensorBoard-Start (Default: 6006).",
+    )
     args = parser.parse_args()
     n_steps = args.n_steps if args.n_steps is not None else max(32, 512 // args.n_envs)
     if args.tag is None:
@@ -259,6 +334,9 @@ if __name__ == "__main__":
     run_dir = EXPERIMENTS_DIR / run_id
     (run_dir / "models").mkdir(parents=True, exist_ok=True)
     (run_dir / "tensorboard").mkdir(exist_ok=True)
+
+    if not args.no_tensorboard:
+        start_tensorboard(EXPERIMENTS_DIR, port=args.tensorboard_port)
 
     train_env = make_vec_env(
         make_env,

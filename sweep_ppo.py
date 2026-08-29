@@ -23,6 +23,11 @@ Ergebnisse ein und druckt eine Rangliste. Jeder Einzellauf landet ganz normal
 unter experiments/<run_id>/ und wird wie gewohnt in EXPERIMENTS.md
 protokolliert - dieses Skript fügt nur eine Zusammenfassung obendrauf.
 
+TensorBoard wird hier einmal zentral gestartet (zeigt experiments/, also
+alle Einzelläufe gemeinsam) statt in jedem train_ppo.py-Subprocess einzeln -
+sonst würden mehrere Prozesse um denselben Port konkurrieren. Mit
+--no-tensorboard abschalten.
+
 Wichtig: das Budget hier ist bewusst klein (Default 150k Steps) - es geht um
 ein *relatives* Ranking der Konfigurationen, nicht um das finale Modell. Die
 Gewinner-Konfiguration danach mit deutlich mehr --timesteps final trainieren.
@@ -33,6 +38,8 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+
+from train_ppo import start_tensorboard
 
 REPO_ROOT = Path(__file__).resolve().parent
 EXPERIMENTS_DIR = REPO_ROOT / "experiments"
@@ -71,6 +78,7 @@ def run_one(config_name, extra_args, seed, timesteps, eval_episodes, device, n_e
         "--tag", tag,
         "--device", device,
         "--n-envs", str(n_envs),
+        "--no-tensorboard",  # sweep_ppo.py startet TensorBoard selbst einmal zentral
     ] + extra_args
     print(f"\n=== {config_name} (seed={seed}) ===\n{' '.join(cmd)}\n")
     subprocess.run(cmd, cwd=REPO_ROOT, check=True)
@@ -99,7 +107,18 @@ if __name__ == "__main__":
         "--configs", type=str, nargs="+", default=list(CONFIGS), choices=list(CONFIGS),
         help="Nur diese Konfigurationen testen (Default: alle)",
     )
+    parser.add_argument(
+        "--no-tensorboard", action="store_true",
+        help="TensorBoard nicht automatisch starten (Default: an, siehe Docstring oben).",
+    )
+    parser.add_argument(
+        "--tensorboard-port", type=int, default=6006,
+        help="Port für den automatischen TensorBoard-Start (Default: 6006).",
+    )
     args = parser.parse_args()
+
+    if not args.no_tensorboard:
+        start_tensorboard(EXPERIMENTS_DIR, port=args.tensorboard_port)
 
     results = []
     for config_name in args.configs:
