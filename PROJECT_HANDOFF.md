@@ -59,8 +59,21 @@ Fokus liegt auf dem **Verständnis der RL-Grundlagen** (nicht primär auf State-
 
    Zwei zentrale Beobachtungen: (1) PPO verbessert sich **monoton** mit mehr Trainingszeit statt zu kollabieren wie DQN – Endmodell und Best-Checkpoint liegen bei PPO in allen drei Läufen praktisch gleichauf, es gibt keinen "Rettungsanker" durch Best-Checkpoint-Auswertung nötig, weil nichts einbricht. (2) Deutlich abnehmender Grenznutzen: 300k→1M (+3.3× Steps) bringt +40 Punkte, 1M→25M (+25× Steps) nur noch +16 Punkte – GPU/mehr Compute ist hier vermutlich nicht der wirksamste Hebel mehr, siehe Nächster Schritt.
 
-7. **⏳ Evaluation** (nächster Schritt)
-   Viele Testepisoden je Agent, Score-Verteilungen vs. Baselines aus Phase 3 vergleichen; PPO (Ø 108.86 bei 25M Steps) liegt klar über Greedy (27.72) und allen DQN-Läufen, aber noch unter guten menschlichen Spielern (ca. 150-170) und weit unter dem theoretischen Maximum (307)
+7. **✅ Evaluation / Standortbestimmung** (erledigt – mit unbequemem Befund)
+   Report: `reports/phase7_analysis_report.html`. Kernbefund: **die Greedy-Baseline aus Phase 3 war kaputt** und hat alle bisherigen Vergleiche verzerrt. `greedy_agent` bewertet Züge mit `score_board()`, das nur *fertige* Linien zählt – während der ersten ~15 Züge ist keine Linie fertig, alle Felder sehen gleich gut aus, es wird faktisch zufällig gelegt (daher Ø 27,72).
+
+   Dieselbe Heuristik mit `potential_score()` (existiert seit Wave 2 im Repo, wurde nur fürs Reward Shaping genutzt) kommt **ohne jedes Training auf Ø 120,88**. Eine 1-Ply-Erwartungswert-Heuristik, die zusätzlich das Restdeck auswertet, kommt auf **Ø 128,93**. Beide sind jetzt als Agenten in `baselines.py` (`greedy_potential`, `expected_value`), Lauf: `experiments/2026-08-30_0705_phase7_heuristic_baselines/` (2000 Episoden je Agent).
+
+   | Agent | Ø | Std | ≥150 Punkte |
+   |---|---|---|---|
+   | expected_value (Heuristik, kein Training) | **128,93** | 23,40 | 19,9 % |
+   | greedy_potential (Heuristik, kein Training) | **120,88** | 35,76 | 22,1 % |
+   | ppo_25m_singleenv (25 Mio. Steps) | 108,86 | 25,19 | 3,2 % |
+   | greedy (score_board, alte Baseline) | 27,60 | 22,72 | 0 % |
+
+   Damit ist die Antwort auf „ist der Agent schlechter als ein Mensch?" eindeutig **ja** – er liegt sogar unter zwei untrainierten Heuristiken. Zur Einordnung: die Spielanleitung nennt 150 als „gutes", 200 als „sehr gutes" Ergebnis; der bekannteste öffentliche Take-It-Easy-Agent (NN + MCTS) liegt bei Ø ≈ 167, was dort als praktische Obergrenze bei zufälligem Kachelzug argumentiert wird.
+
+   Zwei weitere Befunde: (1) **Compute ist nicht der Hebel.** Über den letzten Abschnitt (1 Mio. → 25 Mio.) bringt das Training nur noch ≈11,5 Punkte pro Verzehnfachung der Steps – für 150 Punkte wären ≈10^11 Steps nötig. (2) **Hyperparameter sind es auch nicht.** Im 1-Mio.-Sweep lagen vier von fünf Konfigurationen zwischen Ø 87,7 und 92,6, bei einer Seed-zu-Seed-Streuung von ±4 bis ±9 – kein signifikanter Unterschied (nur `constant_lr` mit Ø 67,5 ist klar schlechter).
 
 ## Bisheriger Stand (Details zu Phase 2)
 
@@ -113,9 +126,48 @@ python env.py    # sollte Board-Render + Random-Agent-Score ausgeben
 
 ## Nächster Schritt
 
-**Phase 7: Evaluation / Feinschliff, zwei mögliche Richtungen**
+**Phase 8: Afterstate-Wertfunktion statt Policy-Learning.** Ausführliche
+Begründung und Ertragsschätzung je Hebel im Report
+(`reports/phase7_analysis_report.html`), kurz zusammengefasst:
 
-1. **Hyperparameter statt mehr Steps.** PPO zeigt deutlich abnehmenden Grenznutzen (300k→1M: +40 Punkte, 1M→25M: nur +16 Punkte trotz 25× mehr Steps) – 25 Mio. Steps auf der CPU war vermutlich eine sehr lange Laufzeit für relativ wenig Zugewinn. Bevor noch mehr Compute investiert wird, lohnt sich eher Tuning: größeres Netz (aktuell nur `[128,128]`, evtl. `[256,256]` oder tiefer), `n_steps`/`batch_size` anpassen, `ent_coef` reduzieren sobald die Policy konvergiert, oder Reward-Normalisierung (Score bis 307, `gamma=1.0` ungeglättet – SB3s `VecNormalize` könnte das Lernen stabilisieren/beschleunigen).
-2. **Sauberer Abschlussvergleich.** Aktuell existieren mehrere DQN- und PPO-Läufe mit unterschiedlichem Compute-Budget nebeneinander. Für Phase 7 (Evaluation) wäre ein finaler Vergleich sinnvoll: das beste Modell je Algorithmus (PPO 25M vs. bestes DQN-Checkpoint) über die gleichen 1000 Eval-Episoden/Seeds gegen Random und Greedy aus Phase 3, als eine zusammenfassende Tabelle/Grafik in `reports/`.
+1. **Afterstate-Wertfunktion (größter Hebel, erwartet 140–170).** Take It Easy
+   ist ein Einpersonen-MDP mit vollständig bekannter Dynamik: nach dem Legen
+   ist der Folgezustand deterministisch, und die nächste Kachel ist eine exakt
+   bekannte Gleichverteilung über das Restdeck. Statt eine Policy zu lernen,
+   lernt man `V(Folgezustand)` = erwarteter Endscore und wählt zur Spielzeit
+   `argmax` über die ≤19 möglichen Folgezustände (gleiche Konstruktion wie bei
+   2048 und TD-Gammon). Vorteile gegenüber PPO: skalare Regression statt
+   verrauschtem Policy-Gradient, jeder der 19 Züge liefert Trainingssignal
+   (nicht nur der gewählte), und der `argmax` ist bereits eine 1-Ply-Suche,
+   die Fehler der Wertfunktion teilweise wegkorrigiert. Lohnend zusätzlich:
+   **distributionale** Ausgabe (Verteilung über Endscores statt Mittelwert) –
+   der Endscore ist eine Summe weniger großer Sprünge, genau der Fall, in dem
+   das messbar hilft.
+2. **Observation reparieren (erwartet +15–30).** Der aktuelle
+   `Box(0..9, shape=(60,))`-Vektor hat zwei Fehler: Kachelwerte sind
+   kategorial, nicht ordinal (→ One-Hot pro Feld und Richtung), und **das
+   Restdeck fehlt komplett** (→ 27 Dimensionen Multi-Hot). Ohne das Restdeck
+   ist das Problem für den Agenten faktisch partiell beobachtbar – er kann
+   nicht abschätzen, ob eine angefangene Linie überhaupt noch komplettierbar
+   ist. Optional zusätzlich 15 Linien-Features (aktueller Wert, belegt,
+   fehlend, passende Kacheln im Deck) – das sind genau die Größen, aus denen
+   `expected_value` seine 128,93 zieht.
+3. **Expectimax zur Spielzeit (erwartet +5–15).** Weil das Restdeck bekannt
+   ist, lässt sich über die nächste Kachel exakt erwartungswerten statt zu
+   sampeln; in den letzten ~6 Zügen ist vollständige Suche möglich. Wirkt nur
+   zusammen mit 1 (Suche braucht eine Blattbewertung).
+4. **Falls PPO bleiben soll (erwartet 130–145):** Behaviour Cloning auf
+   `expected_value`-Trajektorien als Warmstart, danach MaskablePPO-Fine-Tuning
+   – aber nur sinnvoll zusammen mit der neuen Observation aus 2.
+5. **Methodik:** ≥5 Seeds und ≥2000 Eval-Episoden auf identischen
+   Episoden-Seeds (300 Episoden = Standardfehler ≈1,4 Punkte, zu wenig bei
+   einer Seed-Streuung von ±4 bis ±9). Und in jeder Tabelle ab jetzt
+   `greedy_potential` = 120,88 als Referenzzeile statt `greedy` = 27,60.
 
-Offene Frage an dich: eher Hyperparameter-Tuning für PPO ausprobieren, oder erstmal mit dem aktuellen 25M-Modell den Abschlussvergleich/Report für Phase 7 bauen?
+**Nicht empfohlen:** größere Netze bei unveränderter Observation (die
+Information fehlt, nicht die Kapazität), weitere Hyperparameter-Sweeps auf dem
+jetzigen Setup, GPU (Flaschenhals ist der Python-Env-Step), Rückkehr zu DQN.
+
+Konkretes erstes Ziel für ein neues `train_afterstate.py`: nicht 167, sondern
+**sauber über 128,93** – also die untrainierte Heuristik schlagen. Erst wenn
+das steht, lohnen sich Suche und langes Training.

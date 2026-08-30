@@ -117,3 +117,7 @@ Ein Lauf pro Zeile. Details (Config, Kennzahlen, Trajektorien) unter `experiment
 | 2026-08-29 | `2026-08-29_1806_sweep_n_envs4_1m_seed5` | sweep_n_envs4_1m_seed5 | ppo_full_board_masked_best_checkpoint | 300 | 68.55 | 23.35 | 0 | 133 | 87fa7b8 |
 | 2026-08-30 | `2026-08-30_0815_ppo_1m_8envs` | ppo_1m_8envs | ppo_full_board_masked | 1000 | 90.40 | 22.13 | 4 | 160 | 87fa7b8 |
 | 2026-08-30 | `2026-08-30_0815_ppo_1m_8envs` | ppo_1m_8envs | ppo_full_board_masked_best_checkpoint | 1000 | 88.62 | 23.03 | 0 | 160 | 87fa7b8 |
+| 2026-08-30 | `2026-08-30_0705_phase7_heuristic_baselines` | phase7_heuristic_baselines | random | 2000 | 10.79 | 14.83 | 0 | 82 | 5c5736f |
+| 2026-08-30 | `2026-08-30_0705_phase7_heuristic_baselines` | phase7_heuristic_baselines | greedy | 2000 | 27.60 | 22.72 | 0 | 122 | 5c5736f |
+| 2026-08-30 | `2026-08-30_0705_phase7_heuristic_baselines` | phase7_heuristic_baselines | greedy_potential | 2000 | 120.88 | 35.76 | 15 | 249 | 5c5736f |
+| 2026-08-30 | `2026-08-30_0705_phase7_heuristic_baselines` | phase7_heuristic_baselines | expected_value | 2000 | 128.93 | 23.40 | 59 | 207 | 5c5736f |

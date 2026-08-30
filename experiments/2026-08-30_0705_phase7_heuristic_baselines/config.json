@@ -1,0 +1,16 @@
+{
+  "run_id": "2026-08-30_0705_phase7_heuristic_baselines",
+  "tag": "phase7_heuristic_baselines",
+  "timestamp": "2026-08-30T07:05:28+00:00",
+  "git_commit": "5c5736f",
+  "env": "TakeItEasyEnv",
+  "agents": [
+    "random",
+    "greedy",
+    "greedy_potential",
+    "expected_value"
+  ],
+  "episodes_per_agent": 2000,
+  "master_seed": 0,
+  "n_trajectories_recorded": 5
+}

@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 from env import TakeItEasyEnv
-from game import score_board
+from game import score_board, potential_score, ALL_LINE_GROUPS
 
 REPO_ROOT = Path(__file__).resolve().parent
 EXPERIMENTS_DIR = REPO_ROOT / "experiments"
@@ -55,9 +55,120 @@ def greedy_agent(env, info, rng):
     return rng.choice(best_actions)
 
 
+def greedy_potential_agent(env, info, rng):
+    """Wie greedy_agent, aber bewertet mit game.potential_score() statt
+    score_board().
+
+    Der Unterschied ist der ganze Punkt: score_board() zaehlt nur *fertige*
+    Linien. Waehrend der ersten ~15 Zuege ist praktisch keine Linie fertig,
+    d.h. alle Felder sehen fuer greedy_agent gleich gut aus und es wird
+    faktisch zufaellig gelegt - deshalb landet greedy_agent nur bei ~28
+    Punkten. potential_score() bewertet auch angefangene, noch "lebendige"
+    Linien (Wert x Anzahl bereits gelegter Kacheln) und gibt damit ab dem
+    ersten Zug ein echtes Signal.
+    """
+    valid_actions = np.where(info["action_mask"])[0]
+
+    best_score = -1
+    best_actions = []
+    for action in valid_actions:
+        candidate_board = list(env.board)
+        candidate_board[action] = env.current_tile
+        score = potential_score(candidate_board)
+        if score > best_score:
+            best_score = score
+            best_actions = [action]
+        elif score == best_score:
+            best_actions.append(action)
+
+    return rng.choice(best_actions)
+
+
+# Alle 15 Linien als (wert_index_in_der_kachel, feld_indices) - einmal flach
+# aufgebaut, damit expected_value_agent nicht bei jedem Zug ueber
+# ALL_LINE_GROUPS iterieren muss.
+FLAT_LINES = [
+    (value_pos, line)
+    for _direction, (lines, value_pos) in ALL_LINE_GROUPS.items()
+    for line in lines
+]
+
+
+def _completion_probability(remaining, value_pos, value, n_missing):
+    """Wahrscheinlichkeit, dass alle `n_missing` noch freien Felder einer
+    Linie eine Kachel mit `value` in Richtung `value_pos` bekommen - unter
+    der vereinfachenden Annahme, dass diese Felder unabhaengig aus dem
+    Restdeck gefuellt werden (Ziehen ohne Zuruecklegen, aber ohne die
+    Konkurrenz anderer Linien zu modellieren)."""
+    n = len(remaining)
+    if n_missing > n:
+        return 0.0
+    matching = sum(1 for tile in remaining if tile[value_pos] == value)
+    p = 1.0
+    for j in range(n_missing):
+        p *= max(0.0, matching - j) / max(1, n - j)
+    return p
+
+
+def expected_line_score(board, remaining):
+    """Erwarteter Endscore des Boards: Summe ueber alle 15 Linien von
+    P(Linie wird komplett und konsistent) x Linienwert.
+
+    Nutzt explizit das Restdeck (`remaining`) - genau die Information, die
+    in der aktuellen Observation von env.py fehlt."""
+    total = 0.0
+    for value_pos, line in FLAT_LINES:
+        values = [board[i][value_pos] for i in line if board[i] is not None]
+        n_missing = len(line) - len(values)
+
+        if values and len(set(values)) > 1:
+            continue  # Linie ist tot
+        if n_missing == 0:
+            total += values[0] * len(line)
+            continue
+
+        if values:
+            value = values[0]
+            total += _completion_probability(remaining, value_pos, value, n_missing) * value * len(line)
+        else:
+            # Noch leere Linie: der beste erreichbare Erwartungswert
+            candidates = {tile[value_pos] for tile in remaining}
+            total += max(
+                (_completion_probability(remaining, value_pos, v, n_missing) * v * len(line)
+                 for v in candidates),
+                default=0.0,
+            )
+    return total
+
+
+def expected_value_agent(env, info, rng):
+    """1-Ply-Heuristik: legt die Kachel dorthin, wo der erwartete Endscore
+    (expected_line_score) am groessten ist. Kein Lernen, keine Suche ueber
+    mehrere Zuege - nur eine Bewertung des Folgezustands, die das Restdeck
+    beruecksichtigt."""
+    valid_actions = np.where(info["action_mask"])[0]
+    remaining = list(env.deck)
+
+    best_score = -1e18
+    best_actions = []
+    for action in valid_actions:
+        candidate_board = list(env.board)
+        candidate_board[action] = env.current_tile
+        score = expected_line_score(candidate_board, remaining)
+        if score > best_score:
+            best_score = score
+            best_actions = [action]
+        elif score == best_score:
+            best_actions.append(action)
+
+    return rng.choice(best_actions)
+
+
 AGENTS = {
     "random": random_agent,
     "greedy": greedy_agent,
+    "greedy_potential": greedy_potential_agent,
+    "expected_value": expected_value_agent,
 }
 
 

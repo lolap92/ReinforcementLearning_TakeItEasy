@@ -1,0 +1,680 @@
+<meta charset="utf-8">
+<title>Heuristik schlägt 25 Mio. Steps</title>
+<style>
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --ink: #17160f;
+    --ink-2: #57544a;
+    --ink-muted: #8c8878;
+    --line: #e4e1d7;
+    --line-strong: #d6d2c4;
+    --c-ppo: #7c5cff;
+    --c-heur: #1baf7a;
+    --c-expect: #2a78d6;
+    --c-alert: #eb6834;
+    --c-weak: #a8a394;
+    --c-ceiling: #c2469b;
+    --band: rgba(140, 136, 120, 0.12);
+    --code-bg: rgba(124, 92, 255, 0.10);
+    --shadow: 0 1px 2px rgba(23, 22, 15, 0.04), 0 8px 24px rgba(23, 22, 15, 0.05);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      --bg: #14130f; --surface: #1c1b16; --ink: #f5f3ec; --ink-2: #c7c3b5;
+      --ink-muted: #8c8878; --line: #322f26; --line-strong: #3d392c;
+      --c-ppo: #9580ff; --c-heur: #24c98c; --c-expect: #3987e5;
+      --c-alert: #f0743a; --c-weak: #6f6b5e; --c-ceiling: #d972b8;
+      --band: rgba(140, 136, 120, 0.18);
+      --code-bg: rgba(149, 128, 255, 0.16);
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14130f; --surface: #1c1b16; --ink: #f5f3ec; --ink-2: #c7c3b5;
+    --ink-muted: #8c8878; --line: #322f26; --line-strong: #3d392c;
+    --c-ppo: #9580ff; --c-heur: #24c98c; --c-expect: #3987e5;
+    --c-alert: #f0743a; --c-weak: #6f6b5e; --c-ceiling: #d972b8;
+    --band: rgba(140, 136, 120, 0.18);
+    --code-bg: rgba(149, 128, 255, 0.16);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.35);
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: #f7f6f2; --surface: #ffffff; --ink: #17160f; --ink-2: #57544a;
+    --ink-muted: #8c8878; --line: #e4e1d7; --line-strong: #d6d2c4;
+    --c-ppo: #7c5cff; --c-heur: #1baf7a; --c-expect: #2a78d6;
+    --c-alert: #eb6834; --c-weak: #a8a394; --c-ceiling: #c2469b;
+    --band: rgba(140, 136, 120, 0.12);
+    --code-bg: rgba(124, 92, 255, 0.10);
+    --shadow: 0 1px 2px rgba(23, 22, 15, 0.04), 0 8px 24px rgba(23, 22, 15, 0.05);
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 880px; margin: 0 auto; padding: 56px 24px 80px; display: flex; flex-direction: column; gap: 40px; }
+
+  .eyebrow {
+    font-size: 12px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-muted); display: flex; align-items: center; gap: 8px;
+  }
+  .eyebrow .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--c-alert); }
+  h1 { font-size: 30px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; margin: 10px 0 0; text-wrap: balance; }
+  .lede { font-size: 16px; line-height: 1.65; color: var(--ink-2); max-width: 68ch; margin: 14px 0 0; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  section { display: flex; flex-direction: column; gap: 16px; }
+  h2 { font-size: 13px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); margin: 0; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 24px 24px 20px; }
+
+  .verdict { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+  .verdict > div { background: var(--surface); padding: 20px 20px 18px; display: flex; flex-direction: column; gap: 6px; }
+  .verdict .k { font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+  .verdict .v { font-size: 27px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .verdict .n { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+  @media (max-width: 640px) { .verdict { grid-template-columns: 1fr; } }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 6px; font-size: 13px; color: var(--ink-2); }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .legend-note { font-size: 12px; color: var(--ink-muted); margin-left: auto; }
+
+  .chart-wrap { position: relative; }
+  svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
+  .axis-label { fill: var(--ink-muted); font-size: 11px; font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; }
+  .name-label { fill: var(--ink-2); font-size: 12.5px; font-weight: 600; }
+  .gridline { stroke: var(--line); stroke-width: 1; }
+  .baseline-line { stroke: var(--line-strong); stroke-width: 1; }
+  .ref-line { stroke-width: 1.5; stroke-dasharray: 4 4; opacity: 0.75; }
+  .ref-text { font-size: 11px; font-weight: 600; font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; }
+  .value-label { font-size: 12px; font-weight: 650; font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; fill: var(--ink); }
+  .bar-hit { fill: transparent; cursor: crosshair; }
+
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--ink); color: var(--bg);
+    font-size: 12px; line-height: 1.5; padding: 8px 10px; border-radius: 6px; box-shadow: var(--shadow);
+    opacity: 0; transform: translate(-50%, calc(-100% - 10px)); transition: opacity 0.1s ease;
+    white-space: nowrap; z-index: 10; font-variant-numeric: tabular-nums;
+  }
+  .tooltip.visible { opacity: 1; }
+  .tooltip b { font-weight: 650; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: right; padding: 9px 4px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; }
+  th:first-child, td:first-child { text-align: left; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  thead th { color: var(--ink-muted); font-weight: 600; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; border-bottom: 1px solid var(--line-strong); }
+  tbody tr:last-child td { border-bottom: none; }
+  td.agent { display: flex; align-items: center; gap: 8px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-weight: 550; }
+  tr.context td { color: var(--ink-muted); font-style: italic; text-align: left; }
+  .dot-inline { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+  .scroll-table { overflow-x: auto; }
+
+  p { font-size: 15px; line-height: 1.7; color: var(--ink-2); margin: 0; }
+  p + p { margin-top: 12px; }
+  ul { margin: 0; padding-left: 20px; font-size: 15px; line-height: 1.7; color: var(--ink-2); }
+  li + li { margin-top: 8px; }
+  .callout { border-left: 2px solid var(--c-alert); padding: 2px 0 2px 16px; }
+  .callout.good { border-left-color: var(--c-heur); }
+  .callout.muted { border-left-color: var(--ink-muted); }
+  code { font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; font-size: 0.9em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  b, strong { color: var(--ink); }
+
+  .lever { display: flex; flex-direction: column; gap: 10px; }
+  .lever + .lever { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--line); }
+  .lever-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .rank { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: var(--surface); background: var(--c-heur); border-radius: 4px; padding: 3px 7px; font-family: ui-monospace, monospace; flex: none; }
+  .rank.b { background: var(--c-expect); }
+  .rank.c { background: var(--c-ppo); }
+  .rank.d { background: var(--c-weak); }
+  .lever-title { font-size: 17px; font-weight: 650; color: var(--ink); letter-spacing: -0.005em; }
+  .gain { margin-left: auto; font-size: 12px; font-weight: 650; font-family: ui-monospace, monospace; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+
+  .next { font-size: 13px; color: var(--ink-muted); border-top: 1px solid var(--line); padding-top: 20px; line-height: 1.7; }
+  .next b { color: var(--ink-2); }
+  a { color: var(--c-expect); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+</style>
+
+<div class="page">
+  <header>
+    <div class="eyebrow"><span class="dot"></span>Take It Easy · RL-Lernprojekt · Phase 7 · Standortbestimmung</div>
+    <h1>Eine 20-Zeilen-Heuristik schlägt 25 Millionen PPO-Steps – die Messlatte war die ganze Zeit falsch</h1>
+    <p class="lede">
+      Der bisher beste Agent (<code>ppo_25m_singleenv</code>, Ø <strong>108,9</strong>)
+      wurde immer gegen die Greedy-Baseline aus Phase 3 verglichen – Ø 27,7.
+      Diese Baseline ist aber <strong>kaputt</strong>: sie bewertet Züge mit
+      <code>score_board()</code>, das nur <em>fertige</em> Linien zählt, und
+      legt deshalb 15 Züge lang faktisch zufällig. Ersetzt man sie durch
+      dieselbe Heuristik mit <code>potential_score()</code> – einer Funktion,
+      die seit Wave 2 bereits im Repo liegt – kommt sie auf
+      <strong>Ø 120,9</strong>, ohne jedes Training. Der Agent ist also nicht
+      nur schlechter als ein Mensch, sondern schlechter als das, was das
+      Projekt schon hatte.
+    </p>
+  </header>
+
+  <div class="verdict">
+    <div>
+      <span class="k">Frage 1 · Mensch</span>
+      <span class="v" style="color:var(--c-alert)">Ja, klar drunter</span>
+      <span class="n">108,9 liegt unter dem, was die Spielanleitung als „gutes Ergebnis" bezeichnet (150) und unter jeder Heuristik, die das Restdeck kennt.</span>
+    </div>
+    <div>
+      <span class="k">Frage 2 · Ist Compute der Hebel?</span>
+      <span class="v" style="color:var(--c-alert)">Nein</span>
+      <span class="n">Der gemessene Trend gibt ≈11,5 Punkte pro Verzehnfachung der Steps. Für 150 Punkte wären ≈10<sup>11</sup> Steps nötig.</span>
+    </div>
+    <div>
+      <span class="k">Frage 3 · Was dann?</span>
+      <span class="v" style="color:var(--c-heur)">Afterstate&nbsp;+&nbsp;Deck</span>
+      <span class="n">Wertfunktion über Folgezustände statt Policy, und eine Observation, die das Restdeck überhaupt enthält.</span>
+    </div>
+  </div>
+
+  <section>
+    <h2>Wo alle Agenten wirklich stehen</h2>
+    <div class="card">
+      <div class="legend">
+        <span class="legend-item"><span class="swatch" style="background:var(--c-weak)"></span>Baselines Phase 3</span>
+        <span class="legend-item"><span class="swatch" style="background:var(--c-ppo)"></span>trainiert (MaskablePPO)</span>
+        <span class="legend-item"><span class="swatch" style="background:var(--c-heur)"></span>Heuristik, kein Training</span>
+        <span class="legend-note">n = 1.000–2.000 Episoden je Agent</span>
+      </div>
+      <div class="chart-wrap">
+        <svg class="chart" id="chart1" viewBox="0 0 800 460" role="img" aria-label="Horizontales Balkendiagramm der mittleren Scores. Random 10,8 und Greedy 27,6 ganz unten, die PPO-Läufe bei 52 bis 109, darüber die untrainierten Heuristiken greedy_potential mit 120,9 und expected_value mit 128,9. Gestrichelte Referenzlinien bei 150 (gutes menschliches Ergebnis) und 167 (praktische Obergrenze starker KI)."></svg>
+        <div class="tooltip" id="tooltip1"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="scroll-table">
+        <table>
+          <thead><tr><th>Agent</th><th>n</th><th>Ø</th><th>Std</th><th>Median</th><th>p10</th><th>p90</th><th>Max</th><th>≥ 150</th></tr></thead>
+          <tbody>
+            <tr class="context"><td colspan="9">Untrainierte Heuristiken (neu, <code>2026-08-30_0705_phase7_heuristic_baselines</code>)</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-expect)"></span>expected_value</td><td>2000</td><td><b>128,93</b></td><td>23,40</td><td>128</td><td>98</td><td>159</td><td>207</td><td>19,9&nbsp;%</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-heur)"></span>greedy_potential</td><td>2000</td><td><b>120,88</b></td><td>35,76</td><td>121</td><td>74</td><td>167</td><td>249</td><td>22,1&nbsp;%</td></tr>
+            <tr class="context"><td colspan="9">Trainiert</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-ppo)"></span>ppo_25m_singleenv</td><td>1000</td><td>108,86</td><td>25,19</td><td>113</td><td>74</td><td>140</td><td>190</td><td>3,2&nbsp;%</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-ppo)"></span>ppo_1m (bester Sweep-Seed)</td><td>300</td><td>103,49</td><td>25,70</td><td>–</td><td>–</td><td>–</td><td>183</td><td>–</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-ppo)"></span>ppo_1m_singleenv</td><td>1000</td><td>92,81</td><td>26,41</td><td>98</td><td>56</td><td>125</td><td>169</td><td>1,1&nbsp;%</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-ppo)"></span>ppo_300k_singleenv</td><td>1000</td><td>52,09</td><td>25,09</td><td>–</td><td>–</td><td>–</td><td>150</td><td>–</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-weak)"></span>dqn (bester Lauf)</td><td>1000</td><td>47,94</td><td>19,29</td><td>–</td><td>–</td><td>–</td><td>138</td><td>–</td></tr>
+            <tr class="context"><td colspan="9">Baselines Phase 3</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-weak)"></span>greedy (score_board)</td><td>2000</td><td>27,60</td><td>22,72</td><td>24</td><td>0</td><td>59</td><td>122</td><td>0&nbsp;%</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-weak)"></span>random</td><td>2000</td><td>10,79</td><td>14,83</td><td>0</td><td>0</td><td>31</td><td>82</td><td>0&nbsp;%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:16px">
+        Beide neuen Heuristiken stecken in <code>baselines.py</code> und sind mit
+        <code>python baselines.py --episodes 2000</code> reproduzierbar.
+        <code>greedy_potential</code> ist eine Zeile Unterschied zum bestehenden
+        <code>greedy</code>: <code>potential_score()</code> statt
+        <code>score_board()</code>. <code>expected_value</code> geht einen Schritt
+        weiter und rechnet für jede der 15 Linien die Wahrscheinlichkeit aus, dass
+        sie mit dem <em>Restdeck</em> noch komplett wird.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Antwort auf die Ausgangsfrage: schlechter als ein Mensch?</h2>
+    <div class="card">
+      <p>
+        <b>Ja – und der Abstand ist größer, als die bisherigen Reports nahelegen.</b>
+        Belastbare Durchschnittswerte für Gelegenheitsspieler sind schwer zu
+        finden; die Spielanleitung nennt <b>150 als „gutes", 200 als „sehr gutes"
+        Ergebnis</b> bei einem theoretischen Maximum von 307. Ein Mensch, der die
+        Grundidee einmal verstanden hat („Linien nicht zerstören"), spielt
+        ungefähr so wie <code>greedy_potential</code> oder besser – also im Bereich
+        <b>120–140</b>. Genau dort liegt die Grenze, die der Agent mit 108,9 noch
+        nicht erreicht.
+      </p>
+      <p>
+        Man braucht für diese Antwort aber gar keine Menschen-Daten: der Agent
+        verliert bereits gegen zwei Heuristiken ohne jedes Training. Das ist die
+        eigentlich harte Aussage – <b>der 25-Mio.-Steps-Lauf hat weniger gelernt,
+        als in einer Handvoll Zeilen Spielverständnis steckt</b>.
+      </p>
+      <div class="callout">
+        <p>
+          Konsequenz für die bisherigen Reports: die Aussage „PPO schlägt Greedy
+          um das 3- bis 4-fache" war nie eine Aussage über PPO, sondern eine über
+          eine kaputte Baseline. Alle Phase-5/6-Vergleiche gegen
+          <code>greedy = 27,7</code> sollten mit <code>greedy_potential = 120,9</code>
+          neu gelesen werden.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Die Score-Verteilungen erklären, was fehlt</h2>
+    <div class="card">
+      <div class="legend">
+        <span class="legend-item"><span class="swatch" style="background:var(--c-ppo)"></span>ppo_25m (Ø 108,9)</span>
+        <span class="legend-item"><span class="swatch" style="background:var(--c-heur)"></span>greedy_potential (Ø 120,9)</span>
+        <span class="legend-item"><span class="swatch" style="background:var(--c-expect)"></span>expected_value (Ø 128,9)</span>
+      </div>
+      <div class="chart-wrap">
+        <svg class="chart" id="chart2" viewBox="0 0 800 340" role="img" aria-label="Verteilung der Episoden-Scores in 20-Punkte-Klassen. PPO hat einen schmalen Gipfel zwischen 100 und 140 und praktisch nichts über 160. greedy_potential ist deutlich breiter und reicht bis 240. expected_value liegt dazwischen, mit klar höherem Schwerpunkt als PPO."></svg>
+        <div class="tooltip" id="tooltip2"></div>
+      </div>
+      <p style="margin-top:16px">
+        PPO hat die <b>schmalste</b> Verteilung von allen (Std 25,2 gegenüber 35,8
+        bei <code>greedy_potential</code>) und erreicht nur in <b>3,2 %</b> der
+        Partien 150 oder mehr – bei <code>greedy_potential</code> sind es
+        <b>22,1 %</b>. Der Agent hat also gelernt, verlässlich mittelmäßig zu
+        sein: er vermeidet Totalausfälle (p10 = 74, genau wie die Heuristik), aber
+        er baut nie die großen Boards. Große Boards entstehen, wenn man früh auf
+        eine teure lange Linie setzt (5 × 9 = 45 Punkte) und diese Wette über
+        zehn Züge hinweg absichert – und diese Wette kann man nur eingehen, wenn
+        man weiß, <b>welche Kacheln überhaupt noch im Stapel sind</b>.
+      </p>
+      <div class="callout muted">
+        <p>
+          Und genau das steht nicht in der Observation. <code>env.py</code> liefert
+          19 × 3 Board-Werte + 3 Werte der aktuellen Kachel = 60 Zahlen. Das
+          Restdeck ist daraus zwar theoretisch ableitbar (27 minus gelegt minus
+          aktuell), aber ein MLP müsste diese Mengendifferenz aus rohen Zahlen
+          selbst rekonstruieren – <b>der Agent spielt effektiv blind</b>, während
+          <code>expected_value</code> genau diese Information direkt nutzt.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Warum mehr Trainingszeit nicht reicht – auch wenn sie egal ist</h2>
+    <div class="card">
+      <div class="chart-wrap">
+        <svg class="chart" id="chart3" viewBox="0 0 800 320" role="img" aria-label="Score über Trainings-Steps auf logarithmischer Achse. Die drei gemessenen Punkte 300k, 1 Mio. und 25 Mio. flachen deutlich ab. Die Fortschreibung des letzten Abschnitts schneidet die 150-Punkte-Linie erst bei rund 10 hoch 11 Steps."></svg>
+        <div class="tooltip" id="tooltip3"></div>
+      </div>
+      <p style="margin-top:16px">
+        Die drei Läufe geben eine saubere Sättigungskurve: 300k → 1 Mio. bringt
+        +40,7 Punkte, 1 Mio. → 25 Mio. nur noch +16,1 – bei 25-fachem Aufwand.
+        Über den letzten, für eine Extrapolation maßgeblichen Abschnitt sind das
+        <b>≈11,5 Punkte pro Verzehnfachung</b> der Steps. Fortgeschrieben:
+      </p>
+      <div class="scroll-table" style="margin-top:14px">
+        <table>
+          <thead><tr><th>Zielscore</th><th>benötigte Steps</th><th>Faktor ggü. 25 Mio.</th><th>Einordnung</th></tr></thead>
+          <tbody>
+            <tr><td class="agent">120 (= greedy_potential)</td><td>2,3 × 10<sup>8</sup></td><td>9 ×</td><td>machbar, aber nur Gleichstand mit einer Heuristik</td></tr>
+            <tr><td class="agent">130 (= expected_value)</td><td>1,7 × 10<sup>9</sup></td><td>70 ×</td><td>Wochen bis Monate CPU</td></tr>
+            <tr><td class="agent">150 („gutes Ergebnis")</td><td>9,6 × 10<sup>10</sup></td><td>3.800 ×</td><td>praktisch ausgeschlossen</td></tr>
+            <tr><td class="agent">167 (starke KI)</td><td>2,9 × 10<sup>12</sup></td><td>116.000 ×</td><td>ausgeschlossen</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:16px">
+        Selbst wenn Trainingszeit keine Rolle spielt: bei 10<sup>11</sup> Steps
+        und den ~5.000 Steps/s, die diese Env auf einer CPU schafft, wären das
+        über 600 Jahre. Die Extrapolation ist grob – aber sie muss um drei
+        Größenordnungen falsch sein, damit „einfach länger trainieren" eine
+        Option wird. <b>Der Engpass ist nicht Compute, sondern was der Agent
+        sieht und wie er entscheidet.</b>
+      </p>
+      <div class="callout muted">
+        <p>
+          Das deckt sich mit dem Wave-1/2-Sweep bei 1 Mio. Steps: außer
+          <code>constant_lr</code> (klar schlechter, Ø 67,5) lagen alle vier
+          Konfigurationen zwischen Ø 87,7 und 92,6 – bei einer Seed-zu-Seed-Streuung
+          von ±4 bis ±9 Punkten ist davon <b>kein einziger Unterschied
+          signifikant</b>. Vier Wellen Hyperparameter-Tuning haben das Ergebnis
+          nicht bewegt, weil Hyperparameter nicht das Problem sind.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Die Hebel, nach erwartetem Ertrag sortiert</h2>
+    <div class="card">
+
+      <div class="lever">
+        <div class="lever-head">
+          <span class="rank">HEBEL 1</span>
+          <span class="lever-title">Afterstate-Wertfunktion statt Policy</span>
+          <span class="gain">erwartet 140–170</span>
+        </div>
+        <p>
+          Take It Easy ist ein Einpersonen-MDP mit <b>vollständig bekannter
+          Dynamik</b>: nach dem Legen ist der Folgezustand deterministisch, und
+          der Zufall (welche Kachel kommt als nächstes) ist eine exakt bekannte
+          Gleichverteilung über das Restdeck. Damit muss man gar keine Policy
+          lernen. Man lernt <code>V(Folgezustand)</code> – den erwarteten
+          Endscore eines Boards – und wählt zur Spielzeit einfach
+          <code>argmax</code> über die ≤19 möglichen Folgezustände. Das ist die
+          gleiche Konstruktion, die 2048 und Backgammon (TD-Gammon) gelöst hat,
+          und der entscheidende Unterschied zu PPO:
+        </p>
+        <ul>
+          <li>PPO muss aus einem verrauschten Policy-Gradienten lernen, welche von 19 Aktionen gut ist. Eine Afterstate-Wertfunktion lernt stattdessen <b>eine einzige skalare Regression</b> – und jeder der 19 Züge liefert dafür ein Trainingssignal, nicht nur der gewählte.</li>
+          <li>Der <code>argmax</code> über Folgezustände ist bereits eine 1-Ply-Suche. Fehler der Wertfunktion werden dadurch teilweise wegkorrigiert – eine Policy hat diese Korrektur nicht.</li>
+          <li>Training als Monte-Carlo-Regression auf den tatsächlichen Endscore (oder TD(λ)) braucht kein Reward Shaping, kein <code>ent_coef</code>, keine Advantage-Normalisierung – die ganze Wave-1/2-Maschinerie entfällt.</li>
+        </ul>
+        <p>
+          Konkret: MLP mit 3 × 512 (oder klein-residual), Ausgabe skalar. Zusätzlich
+          lohnt sich hier eine <b>distributionale</b> Ausgabe (Verteilung über
+          Endscores statt Mittelwert) – der Endscore ist eine Summe weniger,
+          großer Sprünge (0 oder 45 Punkte für eine Linie), und genau bei so
+          lumpigen Zielgrößen bringt distributionales Lernen messbar mehr als
+          eine Punkt-Schätzung. Der bekannteste öffentliche Take-It-Easy-Agent
+          nutzt genau diese Kombination und landet bei <b>Ø ≈ 167</b>, was dort
+          als praktische Obergrenze bei zufälligem Kachelzug argumentiert wird.
+        </p>
+      </div>
+
+      <div class="lever">
+        <div class="lever-head">
+          <span class="rank b">HEBEL 2</span>
+          <span class="lever-title">Observation: Restdeck rein, One-Hot statt roher Zahlen</span>
+          <span class="gain">erwartet +15–30</span>
+        </div>
+        <p>
+          Der aktuelle 60-dimensionale <code>Box(0..9)</code>-Vektor hat zwei
+          Fehler, die in <code>env.py</code> schon als „bekannte Design-Schwäche"
+          notiert sind – sie sind aber teurer als dort angenommen:
+        </p>
+        <ul>
+          <li><b>Kachelwerte sind kategorial, nicht ordinal.</b> Die 9 in „senkrecht 9" bedeutet nicht „größer als 5", sondern „andere Sorte als 5". Ein MLP auf rohen Zahlen muss diese Nichtlinearität erst lernen. One-Hot pro Feld und Richtung: 19 × (3+3+3) + Leer-Flag = 19 × 10, plus aktuelle Kachel 9 Dimensionen.</li>
+          <li><b>Das Restdeck fehlt komplett.</b> 27 zusätzliche Dimensionen (Multi-Hot: welche der 27 Kacheln liegen noch im Stapel) machen aus dem Blindflug ein vollständig beobachtbares Problem. Ohne das ist der Zustand für den Agenten faktisch partiell beobachtbar.</li>
+        </ul>
+        <p>
+          Optional zusätzlich <b>15 Linien-Features</b> (je Linie: aktueller
+          Wert falls lebendig, wie viele Felder belegt, wie viele fehlen, wie
+          viele passende Kacheln noch im Deck). Das sind genau die Größen, aus
+          denen <code>expected_value</code> seine 128,9 zieht – dem Netz als
+          Eingabe zu schenken statt es aus 60 rohen Zahlen rekonstruieren zu
+          lassen, ist der billigste große Gewinn im ganzen Projekt.
+        </p>
+      </div>
+
+      <div class="lever">
+        <div class="lever-head">
+          <span class="rank c">HEBEL 3</span>
+          <span class="lever-title">Suche zur Spielzeit: Expectimax über das bekannte Restdeck</span>
+          <span class="gain">erwartet +5–15</span>
+        </div>
+        <p>
+          Weil das Restdeck bekannt ist, lässt sich über die nächste Kachel exakt
+          erwartungswerten statt zu sampeln: für jeden Zug den Erwartungswert über
+          alle noch möglichen nächsten Kacheln bilden. Bei ≤19 Zügen × ≤27 Kacheln
+          ist 2-Ply-Expectimax problemlos rechenbar; in den letzten ~6 Zügen wird
+          sogar vollständige Suche bis zum Ende möglich. Das ist reine
+          Rechenzeit zur Spielzeit, kein Training – und Trainingszeit soll ja
+          keine Rolle spielen. Wirkt <b>nur zusammen mit Hebel 1</b>: Suche
+          braucht eine Bewertungsfunktion für die Blätter.
+        </p>
+      </div>
+
+      <div class="lever">
+        <div class="lever-head">
+          <span class="rank d">HEBEL 4</span>
+          <span class="lever-title">Falls es PPO bleiben soll: Warmstart auf der Heuristik</span>
+          <span class="gain">erwartet 130–145</span>
+        </div>
+        <p>
+          Wenn der Lerneffekt bei policy-basiertem RL bleiben soll, ist der
+          effizienteste Weg <b>Behaviour Cloning + Fine-Tuning</b>: ein paar
+          hunderttausend Züge von <code>expected_value</code> aufzeichnen, die
+          Policy per Cross-Entropy darauf vortrainieren (startet dann bei ≈129
+          statt bei 10) und erst danach mit MaskablePPO weiterlernen. Zusammen
+          mit der neuen Observation aus Hebel 2 ist das die konservative
+          Variante, die den bisherigen Code am meisten wiederverwendet. Ohne
+          Hebel 2 lohnt sie sich nicht – die Policy kann dem Lehrer nicht folgen,
+          wenn ihr die Eingaben fehlen, auf denen dessen Entscheidungen beruhen.
+        </p>
+        <p>
+          Nebenbei: <code>ent_coef=0.01</code> bleibt aktuell über alle 25 Mio.
+          Steps konstant. Bei 19 Aktionen ist das ein dauerhafter Zufallsanteil,
+          der am Ende nur noch schadet – anzunehmen wäre ein Abfall auf 0 wie bei
+          der Lernrate. Das ist aber ein Effekt in der Größenordnung weniger
+          Punkte, kein Hebel.
+        </p>
+      </div>
+
+      <div class="lever">
+        <div class="lever-head">
+          <span class="rank d">HEBEL 5</span>
+          <span class="lever-title">Methodik: härtere Messlatte, mehr Episoden, gepaarte Vergleiche</span>
+          <span class="gain">verhindert Fehlschlüsse</span>
+        </div>
+        <p>
+          Damit der nächste Sweep nicht wieder Rauschen misst:
+          <b>300 Eval-Episoden sind zu wenig</b> (Standardfehler ≈1,4 Punkte),
+          und bei einer Seed-zu-Seed-Streuung von ±4 bis ±9 Punkten braucht jede
+          Konfiguration <b>≥5 Seeds und ≥2.000 Episoden</b> auf <b>identischen</b>
+          Episoden-Seeds, damit Unterschiede gepaart auswertbar sind. Und in jeder
+          Tabelle sollte ab jetzt <code>greedy_potential</code> = 120,9 als
+          Referenzzeile stehen, nicht <code>greedy</code> = 27,6.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Was ich nicht empfehlen würde</h2>
+    <div class="card">
+      <ul>
+        <li><b>Größere Netze bei unveränderter Observation.</b> <code>[128,128]</code> ist für 60 Eingabedimensionen nicht der Engpass – die Information fehlt, nicht die Kapazität.</li>
+        <li><b>Weitere Hyperparameter-Sweeps auf dem jetzigen Setup.</b> Der 1-Mio.-Sweep hat gezeigt, dass zwischen den Konfigurationen (außer <code>constant_lr</code>) nichts Messbares liegt. Ein weiterer Sweep bei 5 Mio. Steps würde vermutlich dasselbe Bild zeigen, nur teurer.</li>
+        <li><b>GPU.</b> Der Flaschenhals ist der Python-Env-Step, nicht das Netz. Bei einem 3×512-MLP und Batch-Größen im Tausenderbereich (Hebel 1) ändert sich das – dann lohnt sie sich.</li>
+        <li><b>Zurück zu DQN.</b> Die Kollaps-Befunde aus Phase 5 waren korrekt diagnostiziert. Eine Afterstate-Wertfunktion ist zwar auch value-based, umgeht aber genau das Problem: kein <code>max</code> über gelernte Q-Werte im Bootstrap-Ziel, sondern ein <code>max</code> über <em>bekannte</em> Folgezustände.</li>
+      </ul>
+    </div>
+  </section>
+
+  <p class="next">
+    <b>Konkreter nächster Schritt:</b> ein neues <code>train_afterstate.py</code>
+    neben den bestehenden Skripten – Observation nach Hebel 2, Netz mit skalarer
+    (später distributionaler) Ausgabe, Training per Monte-Carlo-Regression auf den
+    Endscore mit ε-greedy-Selbstspiel, Auswertung mit derselben
+    <code>evaluate()</code>-Methodik und <code>experiments/</code>-Struktur wie
+    bisher. Erstes Ziel ist nicht 167, sondern <b>sauber über 128,9</b> zu kommen –
+    also die untrainierte Heuristik zu schlagen. Erst wenn das steht, lohnt sich
+    Suche (Hebel 3) und langes Training.
+    <br><br>
+    <b>Datenbasis:</b> alle Zahlen aus <code>experiments/</code> dieses Repos;
+    die neuen Heuristik-Baselines aus
+    <code>2026-08-30_0705_phase7_heuristic_baselines</code> (2.000 Episoden je
+    Agent). Menschliche Referenzwerte aus der Spielanleitung
+    (<a href="https://www.ultraboardgames.com/take-it-easy/game-rules.php">150 = gut, 200 = sehr gut</a>),
+    die 167-Punkte-Obergrenze aus
+    <a href="https://obrhubr.org/take-it-easy-ai">Oberhuber, „The 167 Point Ceiling of the Game Take-It-Easy"</a>.
+  </p>
+</div>
+
+<script>
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function txt(node, s) { node.appendChild(document.createTextNode(s)); return node; }
+  function de(x, d) { return x.toFixed(d).replace(".", ","); }
+
+  function bindTip(node, wrap, tip, html) {
+    node.addEventListener("mousemove", (ev) => {
+      const r = wrap.getBoundingClientRect();
+      tip.style.left = (ev.clientX - r.left) + "px";
+      tip.style.top = (ev.clientY - r.top) + "px";
+      tip.innerHTML = html;
+      tip.classList.add("visible");
+    });
+    node.addEventListener("mouseleave", () => tip.classList.remove("visible"));
+  }
+
+  /* ---------- Chart 1: Mittelwerte ---------- */
+  (function () {
+    const rows = [
+      { name: "expected_value", note: "Heuristik, kein Training", v: 128.93, c: "var(--c-expect)" },
+      { name: "greedy_potential", note: "Heuristik, kein Training", v: 120.88, c: "var(--c-heur)" },
+      { name: "ppo_25m_singleenv", note: "25.000.000 Steps", v: 108.86, c: "var(--c-ppo)" },
+      { name: "ppo_1m_singleenv", note: "1.000.000 Steps", v: 92.81, c: "var(--c-ppo)" },
+      { name: "ppo_300k_singleenv", note: "300.000 Steps", v: 52.09, c: "var(--c-ppo)" },
+      { name: "dqn_300k (bester Lauf)", note: "300.000 Steps", v: 47.94, c: "var(--c-weak)" },
+      { name: "greedy (score_board)", note: "Baseline Phase 3", v: 27.60, c: "var(--c-weak)" },
+      { name: "random", note: "Baseline Phase 3", v: 10.79, c: "var(--c-weak)" },
+    ];
+    const refs = [
+      { v: 150, label: "150 · „gutes Ergebnis“ (Anleitung)", c: "var(--c-alert)" },
+      { v: 167, label: "167 · starke KI / praktische Grenze", c: "var(--c-ceiling)" },
+    ];
+    const svg = document.getElementById("chart1");
+    const wrap = svg.parentElement, tip = document.getElementById("tooltip1");
+    const W = 800, H = 460, mL = 176, mR = 20, mT = 26, mB = 34;
+    const plotW = W - mL - mR, plotH = H - mT - mB;
+    const xMax = 190;
+    const x = (v) => mL + (v / xMax) * plotW;
+    const band = plotH / rows.length, barH = 22;
+
+    for (let g = 0; g <= xMax; g += 25) {
+      svg.appendChild(el("line", { class: "gridline", x1: x(g), x2: x(g), y1: mT, y2: mT + plotH }));
+      const t = el("text", { class: "axis-label", x: x(g), y: mT + plotH + 20, "text-anchor": "middle" });
+      svg.appendChild(txt(t, String(g)));
+    }
+    refs.forEach((r) => {
+      svg.appendChild(el("line", { class: "ref-line", stroke: r.c, x1: x(r.v), x2: x(r.v), y1: mT - 14, y2: mT + plotH }));
+      const t = el("text", { class: "ref-text", fill: r.c, x: x(r.v), y: mT - 20, "text-anchor": "end" });
+      svg.appendChild(txt(t, r.label));
+    });
+
+    rows.forEach((r, i) => {
+      const cy = mT + i * band + band / 2;
+      const label = el("text", { class: "name-label", x: mL - 12, y: cy - 1, "text-anchor": "end" });
+      svg.appendChild(txt(label, r.name));
+      const sub = el("text", { class: "axis-label", x: mL - 12, y: cy + 13, "text-anchor": "end" });
+      svg.appendChild(txt(sub, r.note));
+
+      svg.appendChild(el("rect", {
+        x: mL, y: cy - barH / 2, width: Math.max(1, x(r.v) - mL), height: barH,
+        fill: r.c, rx: 3, opacity: 0.92,
+      }));
+      const vl = el("text", { class: "value-label", x: x(r.v) + 8, y: cy + 4 });
+      svg.appendChild(txt(vl, de(r.v, 1)));
+
+      const hit = el("rect", { class: "bar-hit", x: mL, y: cy - band / 2, width: plotW, height: band });
+      bindTip(hit, wrap, tip, `<b>${r.name}</b><br>Ø ${de(r.v, 2)} Punkte<br>${r.note}`);
+      svg.appendChild(hit);
+    });
+    svg.appendChild(el("line", { class: "baseline-line", x1: mL, x2: mL, y1: mT, y2: mT + plotH }));
+  })();
+
+  /* ---------- Chart 2: Verteilungen ---------- */
+  (function () {
+    const bins = [0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240];
+    const series = [
+      { name: "ppo_25m", c: "var(--c-ppo)", p: [0.0, 0.9, 2.9, 11.3, 22.4, 17.8, 34.5, 8.4, 1.7, 0.1, 0.0, 0.0] },
+      { name: "greedy_potential", c: "var(--c-heur)", p: [0.15, 0.95, 3.35, 8.9, 14.4, 20.9, 20.25, 16.85, 9.5, 3.75, 0.7, 0.25] },
+      { name: "expected_value", c: "var(--c-expect)", p: [0.0, 0.0, 0.05, 1.0, 10.05, 25.85, 29.7, 23.5, 8.25, 1.3, 0.3, 0.0] },
+    ];
+    const svg = document.getElementById("chart2");
+    const wrap = svg.parentElement, tip = document.getElementById("tooltip2");
+    const W = 800, H = 340, mL = 44, mR = 16, mT = 18, mB = 46;
+    const plotW = W - mL - mR, plotH = H - mT - mB;
+    const yMax = 36;
+    const x = (v) => mL + (v / 240) * plotW;
+    const y = (v) => mT + plotH - (v / yMax) * plotH;
+
+    for (let g = 0; g <= yMax; g += 6) {
+      svg.appendChild(el("line", { class: "gridline", x1: mL, x2: mL + plotW, y1: y(g), y2: y(g) }));
+      const t = el("text", { class: "axis-label", x: mL - 8, y: y(g) + 4, "text-anchor": "end" });
+      svg.appendChild(txt(t, g + "%"));
+    }
+    for (let g = 0; g <= 240; g += 40) {
+      const t = el("text", { class: "axis-label", x: x(g), y: mT + plotH + 20, "text-anchor": "middle" });
+      svg.appendChild(txt(t, String(g)));
+    }
+    const ax = el("text", { class: "axis-label", x: mL + plotW / 2, y: mT + plotH + 40, "text-anchor": "middle" });
+    svg.appendChild(txt(ax, "Endscore einer Episode (20-Punkte-Klassen)"));
+
+    [150].forEach((v) => {
+      svg.appendChild(el("line", { class: "ref-line", stroke: "var(--c-alert)", x1: x(v), x2: x(v), y1: mT, y2: mT + plotH }));
+    });
+
+    series.forEach((s) => {
+      const pts = [];
+      s.p.forEach((v, i) => { pts.push([x((bins[i] + bins[i + 1]) / 2), y(v)]); });
+      const d = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+      const area = d + ` L${pts[pts.length - 1][0].toFixed(1)} ${y(0)} L${pts[0][0].toFixed(1)} ${y(0)} Z`;
+      svg.appendChild(el("path", { d: area, fill: s.c, opacity: 0.12 }));
+      svg.appendChild(el("path", { d: d, fill: "none", stroke: s.c, "stroke-width": 2.2, "stroke-linejoin": "round" }));
+      pts.forEach((p, i) => {
+        const c = el("circle", { cx: p[0], cy: p[1], r: 3.2, fill: s.c });
+        bindTip(c, wrap, tip, `<b>${s.name}</b><br>${bins[i]}–${bins[i + 1]} Punkte<br>${de(s.p[i], 2)} % der Episoden`);
+        svg.appendChild(c);
+      });
+    });
+    svg.appendChild(el("line", { class: "baseline-line", x1: mL, x2: mL + plotW, y1: y(0), y2: y(0) }));
+  })();
+
+  /* ---------- Chart 3: Compute-Skalierung ---------- */
+  (function () {
+    const measured = [
+      { steps: 3e5, v: 52.09, name: "ppo_300k" },
+      { steps: 1e6, v: 92.81, name: "ppo_1m" },
+      { steps: 2.5e7, v: 108.86, name: "ppo_25m" },
+    ];
+    const svg = document.getElementById("chart3");
+    const wrap = svg.parentElement, tip = document.getElementById("tooltip3");
+    const W = 800, H = 320, mL = 44, mR = 130, mT = 18, mB = 46;
+    const plotW = W - mL - mR, plotH = H - mT - mB;
+    const lo = Math.log10(1e5), hi = Math.log10(1e13);
+    const x = (s) => mL + ((Math.log10(s) - lo) / (hi - lo)) * plotW;
+    const yMax = 180;
+    const y = (v) => mT + plotH - (v / yMax) * plotH;
+
+    for (let g = 0; g <= yMax; g += 30) {
+      svg.appendChild(el("line", { class: "gridline", x1: mL, x2: mL + plotW, y1: y(g), y2: y(g) }));
+      const t = el("text", { class: "axis-label", x: mL - 8, y: y(g) + 4, "text-anchor": "end" });
+      svg.appendChild(txt(t, String(g)));
+    }
+    const decades = [[1e5, "10⁵"], [1e6, "10⁶"], [1e7, "10⁷"], [1e8, "10⁸"], [1e9, "10⁹"], [1e10, "10¹⁰"], [1e11, "10¹¹"], [1e12, "10¹²"], [1e13, "10¹³"]];
+    decades.forEach(([s, lab]) => {
+      svg.appendChild(el("line", { class: "gridline", x1: x(s), x2: x(s), y1: mT, y2: mT + plotH, opacity: 0.5 }));
+      const t = el("text", { class: "axis-label", x: x(s), y: mT + plotH + 20, "text-anchor": "middle" });
+      svg.appendChild(txt(t, lab));
+    });
+    const ax = el("text", { class: "axis-label", x: mL + plotW / 2, y: mT + plotH + 40, "text-anchor": "middle" });
+    svg.appendChild(txt(ax, "Trainings-Steps (logarithmisch)"));
+
+    [[150, "150 · gutes Ergebnis", "var(--c-alert)"], [167, "167 · starke KI", "var(--c-ceiling)"], [128.93, "128,9 · expected_value", "var(--c-expect)"], [120.88, "120,9 · greedy_potential", "var(--c-heur)"]]
+      .forEach(([v, lab, c]) => {
+        svg.appendChild(el("line", { class: "ref-line", stroke: c, x1: mL, x2: mL + plotW, y1: y(v), y2: y(v) }));
+        const t = el("text", { class: "ref-text", fill: c, x: mL + plotW + 8, y: y(v) + 4 });
+        svg.appendChild(txt(t, lab));
+      });
+
+    const slope = (108.86 - 92.81) / (Math.log10(2.5e7) - Math.log10(1e6));
+    const proj = (s) => 108.86 + slope * (Math.log10(s) - Math.log10(2.5e7));
+    svg.appendChild(el("path", {
+      d: `M${x(2.5e7).toFixed(1)} ${y(108.86).toFixed(1)} L${x(1e13).toFixed(1)} ${y(proj(1e13)).toFixed(1)}`,
+      fill: "none", stroke: "var(--c-ppo)", "stroke-width": 2, "stroke-dasharray": "5 5", opacity: 0.55,
+    }));
+    const pl = el("text", { class: "axis-label", x: x(3e9), y: y(proj(3e9)) - 12, "text-anchor": "middle", fill: "var(--c-ppo)" });
+    svg.appendChild(txt(pl, "Fortschreibung: +11,5 Punkte je Verzehnfachung"));
+
+    const d = measured.map((m, i) => (i ? "L" : "M") + x(m.steps).toFixed(1) + " " + y(m.v).toFixed(1)).join(" ");
+    svg.appendChild(el("path", { d: d, fill: "none", stroke: "var(--c-ppo)", "stroke-width": 2.4, "stroke-linejoin": "round" }));
+    measured.forEach((m) => {
+      const c = el("circle", { cx: x(m.steps), cy: y(m.v), r: 5, fill: "var(--surface)", stroke: "var(--c-ppo)", "stroke-width": 2.4 });
+      bindTip(c, wrap, tip, `<b>${m.name}</b><br>${m.steps.toExponential(1)} Steps<br>Ø ${de(m.v, 2)} Punkte`);
+      svg.appendChild(c);
+    });
+    svg.appendChild(el("line", { class: "baseline-line", x1: mL, x2: mL + plotW, y1: y(0), y2: y(0) }));
+  })();
+})();
+</script>

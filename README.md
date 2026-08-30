@@ -13,6 +13,14 @@ Episodenlänge (genau 19 Züge), stochastische Kachelzüge, **Sparse Reward**
 (der Score kommt erst am Ende der Episode – gutes Beispiel für das
 Credit-Assignment-Problem), kein Gegner.
 
+**Stand nach Phase 7:** der beste trainierte Agent (MaskablePPO, 25 Mio.
+Steps) kommt auf Ø 108,9 Punkte – und liegt damit *unter* zwei untrainierten
+Heuristiken in `baselines.py` (`greedy_potential` Ø 120,9, `expected_value`
+Ø 128,9). Die ursprüngliche `greedy`-Baseline (Ø 27,6) war als Messlatte
+unbrauchbar, weil sie mit `score_board()` bewertet und dadurch 15 Züge lang
+faktisch zufällig legt. Analyse und Empfehlungen:
+[`reports/phase7_analysis_report.html`](reports/phase7_analysis_report.html).
+
 Zwei RL-Algorithmen werden trainiert und verglichen:
 
 - **DQN** ([`train_dqn.py`](train_dqn.py)) – value-based, lernt Q(s,a), mit
@@ -99,7 +107,26 @@ auf, jeder Einzellauf landet normal unter `experiments/<run_id>/` und in
 Rangliste. Die Gewinner-Konfiguration danach mit deutlich mehr `--timesteps`
 final trainieren.
 
-Beide Skripte legen ihre Ergebnisse unter `experiments/<run_id>/` ab
+### Baselines
+
+```bash
+python baselines.py --episodes 2000
+```
+
+Vier Referenz-Agenten ohne jedes Training, als Messlatte für die trainierten
+Modelle:
+
+| Agent | Ø | Bewertungsfunktion |
+|---|---|---|
+| `random` | 10,8 | – |
+| `greedy` | 27,6 | `score_board()` – zählt nur *fertige* Linien, deshalb während der ersten ~15 Züge praktisch blind. Nur noch aus historischen Gründen dabei |
+| `greedy_potential` | 120,9 | `potential_score()` – bewertet auch angefangene, noch lebendige Linien |
+| `expected_value` | 128,9 | Erwarteter Endscore je Linie unter Berücksichtigung des **Restdecks** |
+
+`greedy_potential` ist die Baseline, an der sich ein trainierter Agent messen
+lassen muss – nicht `greedy`.
+
+Beide Trainingsskripte legen ihre Ergebnisse unter `experiments/<run_id>/` ab
 (`run_id` = Zeitstempel + `--tag`): `config.json`/`summary.json` (git-tracked,
 klein), `models/`/`tensorboard/` (gitignored, groß/binär, lokal aus
 `config.json` reproduzierbar – siehe `experiments/README.md`). Zusätzlich
