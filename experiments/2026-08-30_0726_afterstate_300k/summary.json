@@ -1,0 +1,18 @@
+[
+  {
+    "name": "afterstate_full_board",
+    "n_episodes": 2000,
+    "mean": 160.3820037841797,
+    "std": 27.28329086303711,
+    "min": 55.0,
+    "max": 256.0
+  },
+  {
+    "name": "afterstate_full_board_best_checkpoint",
+    "n_episodes": 2000,
+    "mean": 159.53050231933594,
+    "std": 27.057144165039062,
+    "min": 65.0,
+    "max": 256.0
+  }
+]

@@ -1,0 +1,32 @@
+{
+  "run_id": "2026-08-30_0726_afterstate_300k",
+  "tag": "afterstate_300k",
+  "timestamp": "2026-08-30T07:26:29+00:00",
+  "git_commit": "2d16961",
+  "env": "TakeItEasyEnv",
+  "algorithm": "Afterstate-Wertfunktion (lambda-Return, Selbstspiel)",
+  "hyperparameters": {
+    "episodes": 299776,
+    "iterations": 1171,
+    "games_per_iter": 256,
+    "epochs": 4,
+    "batch_size": 512,
+    "learning_rate": "cosine(0.001 -> 0)",
+    "lambda": 0.7,
+    "gamma": 1.0,
+    "epsilon": "linear(0.2 -> 0.01)",
+    "hidden": [
+      512,
+      512,
+      512
+    ],
+    "value_head": "twohot",
+    "atoms": 51,
+    "line_features": true,
+    "feature_dim": 348,
+    "parameters": 733235
+  },
+  "eval_episodes": 2000,
+  "master_seed": 0,
+  "device": "cpu"
+}

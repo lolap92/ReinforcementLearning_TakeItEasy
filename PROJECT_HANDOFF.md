@@ -75,6 +75,28 @@ Fokus liegt auf dem **Verständnis der RL-Grundlagen** (nicht primär auf State-
 
    Zwei weitere Befunde: (1) **Compute ist nicht der Hebel.** Über den letzten Abschnitt (1 Mio. → 25 Mio.) bringt das Training nur noch ≈11,5 Punkte pro Verzehnfachung der Steps – für 150 Punkte wären ≈10^11 Steps nötig. (2) **Hyperparameter sind es auch nicht.** Im 1-Mio.-Sweep lagen vier von fünf Konfigurationen zwischen Ø 87,7 und 92,6, bei einer Seed-zu-Seed-Streuung von ±4 bis ±9 – kein signifikanter Unterschied (nur `constant_lr` mit Ø 67,5 ist klar schlechter).
 
+8. **✅ Afterstate-Wertfunktion** (erledigt – der Durchbruch)
+   `train_afterstate.py` (PyTorch direkt, kein SB3 – die Konstruktion passt nicht in die SB3-API, weil sie die bekannte Dynamik des Spiels ausnutzt statt sie zu lernen). Statt einer Policy wird `V(Afterstate)` gelernt, also der erwartete Endscore des Boards *nachdem* die Kachel gelegt wurde; zur Spielzeit wird `argmax` über die ≤19 möglichen Folgezustände gebildet – das ist bereits eine 1-Ply-Suche. Gleiche Konstruktion wie TD-Gammon und die starken 2048-Agenten.
+
+   **Ergebnis nach 300.000 Selbstspiel-Episoden (≈5,7 Mio. Environment-Steps, 20 Minuten auf 4 CPU-Kernen): Ø 160,38** über 2000 Episoden auf der echten `TakeItEasyEnv` mit denselben Seeds wie alle anderen Läufe (`experiments/2026-08-30_0726_afterstate_300k/`).
+
+   | Agent | Ø | Std | Median | ≥150 | ≥200 | Steps |
+   |---|---|---|---|---|---|---|
+   | **afterstate_300k** | **160,38** | 27,28 | 161 | **67,4 %** | 7,8 % | 5,7 Mio. |
+   | expected_value (Heuristik) | 128,93 | 23,40 | 128 | 20,0 % | 0,3 % | – |
+   | greedy_potential (Heuristik) | 120,88 | 35,76 | 121 | 22,1 % | 1,0 % | – |
+   | ppo_25m_singleenv | 108,86 | 25,19 | 113 | 3,2 % | 0,0 % | 25 Mio. |
+
+   **+51,5 Punkte gegenüber PPO bei rund einem Viertausendstel der Environment-Steps.** Der Agent liegt damit erstmals über der 150er-Schwelle, die die Spielanleitung „gutes Ergebnis" nennt, und erreicht sie in 67 % statt in 3 % der Partien – also nicht mehr schlechter als ein durchschnittlicher Mensch, sondern besser. Damit ist auch die Phase-7-These bestätigt: die 25 Mio. PPO-Steps waren nie ein Compute-Problem.
+
+   Aufschlussreich ist der Verlauf: schon nach **6.400 Episoden** (2 % des Budgets, 30 Sekunden) lag die Wertfunktion bei Ø 128,7 – auf dem Niveau der besten untrainierten Heuristik. Nach 25.600 Episoden waren es 151,7. Die Lernkurve stieg bis zum letzten Update (Ø 159,98 in der Schlussiteration), das Episodenbudget war also nicht der begrenzende Faktor.
+
+   Was das Netz sieht (348 statt 60 Dimensionen): 19 × 10 One-Hot fürs Board, **27 Dimensionen Restdeck-Multi-Hot** (fehlt in `env.py` komplett), 9 Zähler je (Richtung, Wert), 15 × 8 Linien-Features inkl. Komplettierungswahrscheinlichkeit, 2 Fortschrittswerte.
+
+   Trainingskonstruktion: λ-Return als Regressionsziel – weil alle Zwischenrewards 0 sind und γ=1 gilt, reduziert sich der Forward-View auf `target[t] = (1-λ)·max_a V(s'[t+1]) + λ·target[t+1]` mit `target[18] = Endscore`. Die Zielwerte nutzen immer `max_a V` und sind damit off-policy, werden also von der ε-greedy-Exploration nicht verzerrt. Wertkopf ist per Default ein Two-Hot-Klassifikationskopf über den Score-Bereich 0–307 statt einer MSE-Regression (der Endscore ist eine Summe weniger großer Sprünge – da lernt Klassifikation verlässlicher).
+
+   Verifiziert gegen `game.py`: die vektorisierte Scoring-Funktion stimmt exakt mit `score_board()` überein, das Linien-Feature „potential" summiert sich exakt zu `potential_score()`, und ein „Netz", das nur das vorgerechnete Erwartungswert-Feature aufsummiert, reproduziert die `expected_value`-Heuristik (Ø 127,1) – in der schnellen vektorisierten Simulation wie über die echte Env.
+
 ## Bisheriger Stand (Details zu Phase 2)
 
 ### Dateien
@@ -126,48 +148,28 @@ python env.py    # sollte Board-Render + Random-Agent-Score ausgeben
 
 ## Nächster Schritt
 
-**Phase 8: Afterstate-Wertfunktion statt Policy-Learning.** Ausführliche
-Begründung und Ertragsschätzung je Hebel im Report
-(`reports/phase7_analysis_report.html`), kurz zusammengefasst:
+**Phase 9: Suche zur Spielzeit (Hebel 3 aus dem Phase-7-Report).** Der Agent
+bildet aktuell nur `argmax` über die Folgezustände, also 1 Ply. Weil das
+Restdeck bekannt ist, lässt sich über die nächste Kachel exakt
+erwartungswerten statt zu sampeln: für jeden Zug den Erwartungswert über alle
+noch möglichen nächsten Kacheln bilden. Bei ≤19 Zügen × ≤27 Kacheln ist
+2-Ply-Expectimax problemlos rechenbar, in den letzten ~6 Zügen sogar
+vollständige Suche bis zum Ende. Der Abstand von Ø 160,4 zur 167er-Marke, die
+als praktische Obergrenze bei zufälligem Kachelzug gilt, ist genau der
+Bereich, in dem echte Suche wirken sollte.
 
-1. **Afterstate-Wertfunktion (größter Hebel, erwartet 140–170).** Take It Easy
-   ist ein Einpersonen-MDP mit vollständig bekannter Dynamik: nach dem Legen
-   ist der Folgezustand deterministisch, und die nächste Kachel ist eine exakt
-   bekannte Gleichverteilung über das Restdeck. Statt eine Policy zu lernen,
-   lernt man `V(Folgezustand)` = erwarteter Endscore und wählt zur Spielzeit
-   `argmax` über die ≤19 möglichen Folgezustände (gleiche Konstruktion wie bei
-   2048 und TD-Gammon). Vorteile gegenüber PPO: skalare Regression statt
-   verrauschtem Policy-Gradient, jeder der 19 Züge liefert Trainingssignal
-   (nicht nur der gewählte), und der `argmax` ist bereits eine 1-Ply-Suche,
-   die Fehler der Wertfunktion teilweise wegkorrigiert. Lohnend zusätzlich:
-   **distributionale** Ausgabe (Verteilung über Endscores statt Mittelwert) –
-   der Endscore ist eine Summe weniger großer Sprünge, genau der Fall, in dem
-   das messbar hilft.
-2. **Observation reparieren (erwartet +15–30).** Der aktuelle
-   `Box(0..9, shape=(60,))`-Vektor hat zwei Fehler: Kachelwerte sind
-   kategorial, nicht ordinal (→ One-Hot pro Feld und Richtung), und **das
-   Restdeck fehlt komplett** (→ 27 Dimensionen Multi-Hot). Ohne das Restdeck
-   ist das Problem für den Agenten faktisch partiell beobachtbar – er kann
-   nicht abschätzen, ob eine angefangene Linie überhaupt noch komplettierbar
-   ist. Optional zusätzlich 15 Linien-Features (aktueller Wert, belegt,
-   fehlend, passende Kacheln im Deck) – das sind genau die Größen, aus denen
-   `expected_value` seine 128,93 zieht.
-3. **Expectimax zur Spielzeit (erwartet +5–15).** Weil das Restdeck bekannt
-   ist, lässt sich über die nächste Kachel exakt erwartungswerten statt zu
-   sampeln; in den letzten ~6 Zügen ist vollständige Suche möglich. Wirkt nur
-   zusammen mit 1 (Suche braucht eine Blattbewertung).
-4. **Falls PPO bleiben soll (erwartet 130–145):** Behaviour Cloning auf
-   `expected_value`-Trajektorien als Warmstart, danach MaskablePPO-Fine-Tuning
-   – aber nur sinnvoll zusammen mit der neuen Observation aus 2.
-5. **Methodik:** ≥5 Seeds und ≥2000 Eval-Episoden auf identischen
-   Episoden-Seeds (300 Episoden = Standardfehler ≈1,4 Punkte, zu wenig bei
-   einer Seed-Streuung von ±4 bis ±9). Und in jeder Tabelle ab jetzt
-   `greedy_potential` = 120,88 als Referenzzeile statt `greedy` = 27,60.
+Daneben, in absteigender Priorität:
 
-**Nicht empfohlen:** größere Netze bei unveränderter Observation (die
-Information fehlt, nicht die Kapazität), weitere Hyperparameter-Sweeps auf dem
-jetzigen Setup, GPU (Flaschenhals ist der Python-Env-Step), Rückkehr zu DQN.
-
-Konkretes erstes Ziel für ein neues `train_afterstate.py`: nicht 167, sondern
-**sauber über 128,93** – also die untrainierte Heuristik schlagen. Erst wenn
-das steht, lohnen sich Suche und langes Training.
+- **Längerer Lauf.** Die Lernkurve stieg bis zum letzten Update.
+  `--episodes 3000000` wäre etwa 3,5 Stunden CPU und sollte allein durch das
+  Budget noch zulegen.
+- **Ablationen.** `--no-line-features`, `--value-head scalar` und `--lam 1.0`
+  sind vorbereitet und würden zeigen, wieviel von den 160,4 auf die
+  Feature-Konstruktion und wieviel auf das eigentliche Lernen entfällt. Für
+  ein Lernprojekt ist das die interessanteste offene Frage.
+- **Mehrere Seeds.** Bisher genau ein Lauf. Nach den Erfahrungen aus Phase 6
+  (Seed-Streuung ±4 bis ±9 bei PPO) sollte auch hier über ≥3 Seeds gemessen
+  werden, bevor 160,4 als belastbare Zahl gilt.
+- **`replay.py` erweitern.** Lädt aktuell nur SB3-Modelle (`.zip`); das
+  Afterstate-Modell liegt als `.pt` mit eigener Architektur-Config vor und
+  lässt sich noch nicht nachspielen.

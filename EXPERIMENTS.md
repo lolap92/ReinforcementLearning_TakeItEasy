@@ -121,3 +121,5 @@ Ein Lauf pro Zeile. Details (Config, Kennzahlen, Trajektorien) unter `experiment
 | 2026-08-30 | `2026-08-30_0705_phase7_heuristic_baselines` | phase7_heuristic_baselines | greedy | 2000 | 27.60 | 22.72 | 0 | 122 | 5c5736f |
 | 2026-08-30 | `2026-08-30_0705_phase7_heuristic_baselines` | phase7_heuristic_baselines | greedy_potential | 2000 | 120.88 | 35.76 | 15 | 249 | 5c5736f |
 | 2026-08-30 | `2026-08-30_0705_phase7_heuristic_baselines` | phase7_heuristic_baselines | expected_value | 2000 | 128.93 | 23.40 | 59 | 207 | 5c5736f |
+| 2026-08-30 | `2026-08-30_0726_afterstate_300k` | afterstate_300k | afterstate_full_board | 2000 | 160.38 | 27.28 | 55 | 256 | 2d16961 |
+| 2026-08-30 | `2026-08-30_0726_afterstate_300k` | afterstate_300k | afterstate_full_board_best_checkpoint | 2000 | 159.53 | 27.06 | 65 | 256 | 2d16961 |
