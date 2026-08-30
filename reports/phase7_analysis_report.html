@@ -530,12 +530,12 @@
       { name: "random", note: "Baseline Phase 3", v: 10.79, c: "var(--c-weak)" },
     ];
     const refs = [
-      { v: 150, label: "150 · „gutes Ergebnis“ (Anleitung)", c: "var(--c-alert)" },
-      { v: 167, label: "167 · starke KI / praktische Grenze", c: "var(--c-ceiling)" },
+      { v: 167, label: "167 · starke KI", c: "var(--c-ceiling)", row: 0 },
+      { v: 150, label: "150 · „gutes Ergebnis“ (Anleitung)", c: "var(--c-alert)", row: 1 },
     ];
     const svg = document.getElementById("chart1");
     const wrap = svg.parentElement, tip = document.getElementById("tooltip1");
-    const W = 800, H = 460, mL = 176, mR = 20, mT = 26, mB = 34;
+    const W = 800, H = 460, mL = 176, mR = 20, mT = 50, mB = 34;
     const plotW = W - mL - mR, plotH = H - mT - mB;
     const xMax = 190;
     const x = (v) => mL + (v / xMax) * plotW;
@@ -547,8 +547,9 @@
       svg.appendChild(txt(t, String(g)));
     }
     refs.forEach((r) => {
-      svg.appendChild(el("line", { class: "ref-line", stroke: r.c, x1: x(r.v), x2: x(r.v), y1: mT - 14, y2: mT + plotH }));
-      const t = el("text", { class: "ref-text", fill: r.c, x: x(r.v), y: mT - 20, "text-anchor": "end" });
+      const labelY = mT - 32 + r.row * 16;
+      svg.appendChild(el("line", { class: "ref-line", stroke: r.c, x1: x(r.v), x2: x(r.v), y1: labelY + 5, y2: mT + plotH }));
+      const t = el("text", { class: "ref-text", fill: r.c, x: x(r.v) - 5, y: labelY, "text-anchor": "end" });
       svg.appendChild(txt(t, r.label));
     });
 
@@ -651,10 +652,13 @@
     const ax = el("text", { class: "axis-label", x: mL + plotW / 2, y: mT + plotH + 40, "text-anchor": "middle" });
     svg.appendChild(txt(ax, "Trainings-Steps (logarithmisch)"));
 
-    [[150, "150 · gutes Ergebnis", "var(--c-alert)"], [167, "167 · starke KI", "var(--c-ceiling)"], [128.93, "128,9 · expected_value", "var(--c-expect)"], [120.88, "120,9 · greedy_potential", "var(--c-heur)"]]
-      .forEach(([v, lab, c]) => {
+    [[167, "167 · starke KI", "var(--c-ceiling)", 0], [150, "150 · gutes Ergebnis", "var(--c-alert)", 0],
+     [128.93, "128,9 · expected_value", "var(--c-expect)", -6], [120.88, "120,9 · greedy_potential", "var(--c-heur)", 8]]
+      .forEach(([v, lab, c, dy]) => {
         svg.appendChild(el("line", { class: "ref-line", stroke: c, x1: mL, x2: mL + plotW, y1: y(v), y2: y(v) }));
-        const t = el("text", { class: "ref-text", fill: c, x: mL + plotW + 8, y: y(v) + 4 });
+        svg.appendChild(el("line", { class: "ref-line", stroke: c, "stroke-dasharray": "none", opacity: 0.45,
+          x1: mL + plotW, x2: mL + plotW + 6, y1: y(v), y2: y(v) + dy }));
+        const t = el("text", { class: "ref-text", fill: c, x: mL + plotW + 9, y: y(v) + dy + 4 });
         svg.appendChild(txt(t, lab));
       });
 
