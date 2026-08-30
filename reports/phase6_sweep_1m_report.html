@@ -1,0 +1,470 @@
+<meta charset="utf-8">
+<title>Take It Easy – Wave-2-Sweep bei 1 Mio. Steps</title>
+<style>
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --ink: #17160f;
+    --ink-2: #57544a;
+    --ink-muted: #8c8878;
+    --line: #e4e1d7;
+    --line-strong: #d6d2c4;
+    --c-baseline: #7c5cff;
+    --c-shaping: #1baf7a;
+    --c-constlr: #eb6834;
+    --c-nonorm: #2a78d6;
+    --c-nenvs4: #c2469b;
+    --c-confirm: #8c8878;
+    --band: rgba(140, 136, 120, 0.12);
+    --shadow: 0 1px 2px rgba(23, 22, 15, 0.04), 0 8px 24px rgba(23, 22, 15, 0.05);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      --bg: #14130f; --surface: #1c1b16; --ink: #f5f3ec; --ink-2: #c7c3b5;
+      --ink-muted: #8c8878; --line: #322f26; --line-strong: #3d392c;
+      --c-baseline: #9580ff; --c-shaping: #199e70; --c-constlr: #d95926;
+      --c-nonorm: #3987e5; --c-nenvs4: #d972b8; --c-confirm: #a19c8c;
+      --band: rgba(140, 136, 120, 0.18);
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14130f; --surface: #1c1b16; --ink: #f5f3ec; --ink-2: #c7c3b5;
+    --ink-muted: #8c8878; --line: #322f26; --line-strong: #3d392c;
+    --c-baseline: #9580ff; --c-shaping: #199e70; --c-constlr: #d95926;
+    --c-nonorm: #3987e5; --c-nenvs4: #d972b8; --c-confirm: #a19c8c;
+    --band: rgba(140, 136, 120, 0.18);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.35);
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: #f7f6f2; --surface: #ffffff; --ink: #17160f; --ink-2: #57544a;
+    --ink-muted: #8c8878; --line: #e4e1d7; --line-strong: #d6d2c4;
+    --c-baseline: #7c5cff; --c-shaping: #1baf7a; --c-constlr: #eb6834;
+    --c-nonorm: #2a78d6; --c-nenvs4: #c2469b; --c-confirm: #8c8878;
+    --band: rgba(140, 136, 120, 0.12);
+    --shadow: 0 1px 2px rgba(23, 22, 15, 0.04), 0 8px 24px rgba(23, 22, 15, 0.05);
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 880px; margin: 0 auto; padding: 56px 24px 80px; display: flex; flex-direction: column; gap: 40px; }
+
+  .eyebrow {
+    font-size: 12px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-muted); display: flex; align-items: center; gap: 8px;
+  }
+  .eyebrow .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--c-constlr); }
+  h1 { font-size: 30px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; margin: 10px 0 0; text-wrap: balance; }
+  .lede { font-size: 16px; line-height: 1.65; color: var(--ink-2); max-width: 68ch; margin: 14px 0 0; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  section { display: flex; flex-direction: column; gap: 16px; }
+  h2 { font-size: 13px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); margin: 0; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 24px 24px 20px; }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 4px; font-size: 13px; color: var(--ink-2); }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .swatch.baseline { background: var(--c-baseline); }
+  .swatch.shaping { background: var(--c-shaping); }
+  .swatch.constlr { background: var(--c-constlr); }
+  .swatch.nonorm { background: var(--c-nonorm); }
+  .swatch.nenvs4 { background: var(--c-nenvs4); }
+  .swatch.confirm { background: var(--c-confirm); }
+  .legend-note { font-size: 12px; color: var(--ink-muted); margin-left: auto; }
+
+  .chart-wrap { position: relative; }
+  svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
+  .axis-label { fill: var(--ink-muted); font-size: 11px; font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; }
+  .name-label { fill: var(--ink-2); font-size: 12px; font-weight: 600; }
+  .gridline { stroke: var(--line); stroke-width: 1; }
+  .baseline-line { stroke: var(--line-strong); stroke-width: 1; }
+  .ref-line { stroke: var(--ink-muted); stroke-width: 1.5; stroke-dasharray: 4 4; opacity: 0.6; }
+  .bar-hit { fill: transparent; cursor: crosshair; }
+  .whisker { stroke: var(--ink); stroke-width: 1.5; opacity: 0.55; }
+  .value-label { font-size: 12px; font-weight: 650; font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; text-anchor: middle; fill: var(--ink); }
+  .seed-dot { fill: var(--surface); stroke: var(--ink); stroke-width: 1.3; opacity: 0.8; }
+
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--ink); color: var(--bg);
+    font-size: 12px; line-height: 1.5; padding: 8px 10px; border-radius: 6px; box-shadow: var(--shadow);
+    opacity: 0; transform: translate(-50%, calc(-100% - 10px)); transition: opacity 0.1s ease;
+    white-space: nowrap; z-index: 10; font-variant-numeric: tabular-nums;
+  }
+  .tooltip.visible { opacity: 1; }
+  .tooltip b { font-weight: 650; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: right; padding: 9px 4px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; }
+  th:first-child, td:first-child { text-align: left; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  thead th { color: var(--ink-muted); font-weight: 600; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; border-bottom: 1px solid var(--line-strong); }
+  tbody tr:last-child td { border-bottom: none; }
+  td.agent { display: flex; align-items: center; gap: 8px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-weight: 550; }
+  tr.context td { color: var(--ink-muted); font-style: italic; }
+  tr.group-first td { border-top: 1px solid var(--line-strong); padding-top: 14px; }
+  .dot-inline { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+  .scroll-table { overflow-x: auto; }
+
+  p { font-size: 15px; line-height: 1.7; color: var(--ink-2); margin: 0; }
+  p + p { margin-top: 12px; }
+  .callout { border-left: 2px solid var(--c-constlr); padding: 2px 0 2px 16px; }
+  .callout.good { border-left-color: var(--c-shaping); }
+  .callout.muted { border-left-color: var(--ink-muted); }
+  code { font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; font-size: 0.9em; background: rgba(124, 92, 255, 0.10); padding: 1px 5px; border-radius: 4px; }
+
+  .next { font-size: 13px; color: var(--ink-muted); border-top: 1px solid var(--line); padding-top: 20px; }
+  .next b { color: var(--ink-2); }
+</style>
+
+<div class="page">
+  <header>
+    <div class="eyebrow"><span class="dot"></span>Take It Easy · RL-Lernprojekt · Phase 6 · Sweep bei Ziel-Budget</div>
+    <h1>Bei 1 Mio. Steps zeigt sich, was bei 200k noch Rauschen war</h1>
+    <p class="lede">
+      Derselbe Sweep wie zuvor, jetzt aber bei <strong>1.000.000 Steps statt
+      200.000</strong> – 5 Konfigurationen × 6 Seeds, plus ein einzelner
+      Bestätigungslauf mit <code>--n-envs 8</code>. Ergebnis: <strong>eine
+      Konfiguration (<code>constant_lr</code>) ist jetzt eindeutig und deutlich
+      schlechter</strong> – bei 200k war das noch nicht zu erkennen, weil das
+      Training dort gar nicht lange genug lief, damit der Unterschied
+      überhaupt zum Tragen kommt. Genau das war der Grund, den Sweep beim
+      tatsächlichen Ziel-Budget zu wiederholen statt nur bei 200k zu
+      extrapolieren.
+    </p>
+  </header>
+
+  <section>
+    <h2>Ergebnisse: Mittelwert je Seed (Kreise) und über Seeds gemittelt (Balken ± Streuung)</h2>
+    <div class="card">
+      <div class="legend">
+        <span class="legend-item"><span class="swatch shaping"></span>reward_shaping</span>
+        <span class="legend-item"><span class="swatch nonorm"></span>no_normalize</span>
+        <span class="legend-item"><span class="swatch nenvs4"></span>n_envs4</span>
+        <span class="legend-item"><span class="swatch baseline"></span>baseline</span>
+        <span class="legend-item"><span class="swatch constlr"></span>constant_lr</span>
+        <span class="legend-note">gestrichelt = Bestätigungslauf ppo_1m_8envs (1 Seed, kein Sweep)</span>
+      </div>
+      <div class="chart-wrap">
+        <svg class="chart" id="chart1" viewBox="0 0 800 400" role="img" aria-label="Balkendiagramm mit 5 Konfigurationen bei 1 Million Steps, Mittelwert über 6 Seeds mit Streuung als Fehlerbalken und den sechs Einzel-Seed-Werten als Punkte je Balken. constant_lr liegt deutlich und klar erkennbar unter den anderen vier Konfigurationen, die sich untereinander stark überlappen."></svg>
+        <div class="tooltip" id="tooltip1"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Statistische Einordnung</h2>
+    <div class="card">
+      <div class="scroll-table">
+        <table>
+          <thead><tr><th>Konfiguration</th><th>Ø (6 Seeds)</th><th>Std (Seeds)</th><th>Standardfehler</th><th>Seed-Spanne</th></tr></thead>
+          <tbody>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-shaping)"></span>reward_shaping</td><td>92,62</td><td>7,51</td><td>3,07</td><td>83,9 – 103,5</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-nonorm)"></span>no_normalize</td><td>92,33</td><td>3,91</td><td>1,60</td><td>88,1 – 97,1</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-nenvs4)"></span>n_envs4</td><td>90,22</td><td>9,43</td><td>3,85</td><td>78,0 – 103,5</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-baseline)"></span>baseline</td><td>87,68</td><td>4,07</td><td>1,66</td><td>83,0 – 92,2</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-constlr)"></span>constant_lr</td><td><b>67,54</b></td><td>5,63</td><td>2,30</td><td>62,5 – 77,0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:16px">
+        <code>constant_lr</code> liegt 20 bis 25 Punkte unter den anderen vier
+        – das 5- bis 8-fache des jeweiligen kombinierten Standardfehlers, und
+        die Seed-Spannen überlappen sich nicht einmal (schlechtester
+        <code>baseline</code>-Seed: 83,0; bester <code>constant_lr</code>-Seed:
+        77,0). Das ist ein <b>eindeutiger, kein zufälliger Unterschied</b>.
+        Die anderen vier Konfigurationen dagegen überlappen sich stark
+        (Differenzen liegen alle unter dem 1,5-fachen ihres kombinierten
+        Standardfehlers) – <code>no_normalize</code> liegt zwar numerisch
+        vorne, aber nicht klar genug, um es als sicheren Gewinner zu werten.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Warum <code>constant_lr</code> so viel schlechter abschneidet</h2>
+    <div class="card">
+      <p>
+        Ein 1-Mio.-Steps-Lauf mit <code>n_steps=512</code>, <code>n_envs=1</code>
+        macht <b>≈1.953 Policy-Updates</b> (1.000.000 / 512). Bei
+        <code>constant_lr</code> bleibt jedes dieser fast 2.000 Updates gleich
+        groß – die Policy macht bis zum letzten Update genauso große Schritte
+        wie am Anfang. Das Problem: Sobald die Policy nach einigen hundert
+        Updates schon recht gut ist, reißen weiterhin große Updates sie
+        wiederholt wieder aus einem guten Bereich heraus, statt sie dort fein
+        zu justieren – die Policy "oszilliert" um ein gutes Optimum, statt
+        sich darin einzupendeln.
+      </p>
+      <p>
+        Bei 200k Steps sind es nur <b>≈390 Updates</b> – zu wenige, damit
+        dieser Effekt schon sichtbar wird (das Training war schlicht noch
+        nicht weit genug, um von der fehlenden Feinjustierung überhaupt
+        betroffen zu sein). Genau deshalb sah <code>constant_lr</code> im
+        200k-Sweep noch harmlos aus (Ø 41,1, im selben Rauschband wie die
+        anderen), während sich bei 1 Mio. Steps ein klarer, robuster Nachteil
+        zeigt. Das bestätigt: der lineare LR-Abfall aus Wave 1 ist bei diesem
+        Environment für längere Trainingsläufe tatsächlich wichtig, nicht nur
+        kosmetisch.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Warum die anderen vier sich kaum unterscheiden</h2>
+    <div class="card">
+      <p>
+        <code>baseline</code>, <code>reward_shaping</code>,
+        <code>no_normalize</code> und <code>n_envs4</code> teilen sich alle
+        den linearen LR-Abfall und die größere Value-Function – offenbar sind
+        das die beiden Zutaten, die hier den größten Teil der Arbeit leisten.
+        Die zusätzlichen Wave-2-Stellschrauben (Reward Shaping,
+        Reward-Normalisierung, Parallelisierung) verändern das Ergebnis dann
+        nur noch innerhalb der ohnehin vorhandenen Seed-zu-Seed-Streuung.
+      </p>
+      <div class="callout muted">
+        <p>
+          <code>no_normalize</code> liegt in <i>beiden</i> Sweeps (200k und
+          1M) numerisch leicht vorne und hat zusätzlich die <b>niedrigste
+          Streuung</b> der fünf Konfigurationen (Std 3,91 bei 1M, war auch bei
+          200k am niedrigsten). Eine mögliche Erklärung: PPO normalisiert
+          Advantages ohnehin schon intern (unabhängig von
+          <code>VecNormalize</code>) - eine zusätzliche externe
+          Reward-Normalisierung könnte hier schlicht redundant sein und nur
+          eine weitere bewegliche Komponente ohne echten Zusatznutzen
+          hinzufügen. Zwei übereinstimmende Sweeps sind ein stärkeres Indiz
+          als einer, aber mit je 6 Seeds noch kein Beweis.
+        </p>
+      </div>
+      <p>
+        <code>n_envs4</code> fällt durch die mit Abstand <b>höchste
+        Streuung</b> auf (Std 9,43, Spanne 78,0–103,5 – sowohl der beste als
+        auch einer der schwächeren Einzelwerte aller fünf Konfigurationen
+        kommen von hier). Die Erwartung war, dass mehr parallele
+        Environments die Updates <i>stabiler</i> machen (vielfältigere,
+        weniger korrelierte Daten pro Update) – hier zeigt sich eher das
+        Gegenteil. Mit nur 4 parallelen Spielen ist der Diversitätsgewinn
+        offenbar noch klein, während unterschiedliches "Kachelglück" über 4
+        gleichzeitige Partien pro Update neue Varianz hinzufügt, statt sie
+        herauszumitteln.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Der Bestätigungslauf (<code>ppo_1m_8envs</code>) im Kontext</h2>
+    <div class="card">
+      <p>
+        Der einzelne Lauf mit <code>--n-envs 8</code> (sonst reine
+        Baseline-Settings) kam auf <b>90,40</b> (Endmodell) bzw. 88,62
+        (bestes Checkpoint) – mitten im Band, das <code>baseline</code>
+        (Ø 87,68) und <code>n_envs4</code> (Ø 90,22) über ihre 6 Seeds
+        aufspannen. Das ist ein gutes Zeichen: seit dem <code>n_steps</code>-
+        Fix (automatisch 64 statt fix 512 bei <code>n_envs=8</code>)
+        verhält sich mehr Parallelität nicht mehr wie beim ursprünglichen
+        Fehlschlag (Ø 83,35, siehe vorheriger Report), sondern liegt im
+        normalen Streuungsbereich. Ein einzelner Lauf beweist das nicht
+        endgültig – dafür bräuchte es auch hier mehrere Seeds bei
+        <code>n_envs=8</code> – aber es gibt keinen Hinweis auf ein erneutes
+        Problem.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Einordnung gegenüber dem alten, unoptimierten 1M-Lauf</h2>
+    <div class="card">
+      <p>
+        Der historische Einzellauf vor Wave 1/2 (<code>ppo_1m_singleenv</code>,
+        ein einzelner Seed, konstante Lernrate, keine Normalisierung, kleineres
+        Netz) kam auf 92,81 – das liegt <i>über</i> dem Durchschnitt der neuen,
+        eigentlich verbesserten <code>baseline</code> (87,68) und in etwa auf
+        Höhe von <code>reward_shaping</code>/<code>no_normalize</code>. Mit nur
+        einem Seed lässt sich daraus aber nichts Verlässliches ableiten – 92,81
+        liegt bequem innerhalb der Seed-Streuung, die wir jetzt für praktisch
+        jede Konfiguration sehen (etwa 78 bis 103). Es ist also nicht so, dass
+        Wave 1 den durchschnittlichen Score bei 1 Mio. Steps nachweisbar
+        verbessert hätte – die klar messbare Verbesserung aus Wave 1 ist der
+        behobene <code>n_steps</code>/<code>n_envs</code>-Bug (der bei
+        <code>n_envs&gt;1</code> sonst Updates kostet) und jetzt, neu bestätigt,
+        der LR-Abfall bei langen Läufen. Größere Value-Function und
+        Reward-Normalisierung bleiben dagegen unbewiesene, aber plausible
+        Zusatzverbesserungen.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Alle 31 Läufe im Detail</h2>
+    <div class="card">
+      <div class="scroll-table">
+        <table>
+          <thead><tr><th>Konfiguration</th><th>Seed</th><th>Mittelwert</th><th>Std</th><th>Min</th><th>Max</th><th>Best-Checkpoint Ø</th></tr></thead>
+          <tbody>
+            <tr class="context"><td colspan="7" style="text-align:left">no_normalize</td></tr>
+            <tr><td class="agent">no_normalize</td><td>0</td><td>90.60</td><td>24.06</td><td>24</td><td>170</td><td>88.75</td></tr>
+            <tr><td class="agent">no_normalize</td><td>1</td><td>92.86</td><td>24.64</td><td>24</td><td>148</td><td>92.86</td></tr>
+            <tr><td class="agent">no_normalize</td><td>2</td><td>88.12</td><td>24.28</td><td>5</td><td>166</td><td>90.42</td></tr>
+            <tr><td class="agent">no_normalize</td><td>3</td><td>96.69</td><td>21.52</td><td>25</td><td>151</td><td>96.51</td></tr>
+            <tr><td class="agent">no_normalize</td><td>4</td><td>88.63</td><td>29.19</td><td>24</td><td>175</td><td>86.81</td></tr>
+            <tr><td class="agent">no_normalize</td><td>5</td><td>97.09</td><td>22.06</td><td>5</td><td>155</td><td>96.22</td></tr>
+            <tr class="context"><td colspan="7" style="text-align:left">reward_shaping</td></tr>
+            <tr><td class="agent">reward_shaping</td><td>0</td><td>97.80</td><td>23.37</td><td>24</td><td>163</td><td>94.70</td></tr>
+            <tr><td class="agent">reward_shaping</td><td>1</td><td>94.98</td><td>26.90</td><td>27</td><td>170</td><td>93.89</td></tr>
+            <tr><td class="agent">reward_shaping</td><td>2</td><td>85.62</td><td>24.05</td><td>0</td><td>148</td><td>84.01</td></tr>
+            <tr><td class="agent">reward_shaping</td><td>3</td><td>103.46</td><td>27.16</td><td>0</td><td>182</td><td>103.38</td></tr>
+            <tr><td class="agent">reward_shaping</td><td>4</td><td>83.90</td><td>26.38</td><td>24</td><td>157</td><td>82.18</td></tr>
+            <tr><td class="agent">reward_shaping</td><td>5</td><td>89.97</td><td>24.24</td><td>0</td><td>161</td><td>88.82</td></tr>
+            <tr class="context"><td colspan="7" style="text-align:left">n_envs4</td></tr>
+            <tr><td class="agent">n_envs4</td><td>0</td><td>98.87</td><td>25.23</td><td>20</td><td>161</td><td>98.43</td></tr>
+            <tr><td class="agent">n_envs4</td><td>1</td><td>87.09</td><td>25.23</td><td>24</td><td>167</td><td>87.09</td></tr>
+            <tr><td class="agent">n_envs4</td><td>2</td><td>84.41</td><td>24.92</td><td>8</td><td>156</td><td>83.22</td></tr>
+            <tr><td class="agent">n_envs4</td><td>3</td><td><b>103.49</b></td><td>25.70</td><td>29</td><td><b>183</b></td><td>103.49</td></tr>
+            <tr><td class="agent">n_envs4</td><td>4</td><td>89.49</td><td>24.19</td><td>24</td><td>174</td><td>87.60</td></tr>
+            <tr><td class="agent">n_envs4</td><td>5</td><td>77.99</td><td>22.61</td><td>0</td><td>138</td><td>68.55</td></tr>
+            <tr class="context"><td colspan="7" style="text-align:left">baseline</td></tr>
+            <tr><td class="agent">baseline</td><td>0</td><td>83.92</td><td>24.22</td><td>0</td><td>144</td><td>81.75</td></tr>
+            <tr><td class="agent">baseline</td><td>1</td><td>85.50</td><td>25.38</td><td>8</td><td>164</td><td>85.16</td></tr>
+            <tr><td class="agent">baseline</td><td>2</td><td>83.03</td><td>26.09</td><td>0</td><td>145</td><td>82.97</td></tr>
+            <tr><td class="agent">baseline</td><td>3</td><td>91.99</td><td>22.26</td><td>24</td><td>160</td><td>90.14</td></tr>
+            <tr><td class="agent">baseline</td><td>4</td><td>89.43</td><td>22.87</td><td>5</td><td>172</td><td>88.30</td></tr>
+            <tr><td class="agent">baseline</td><td>5</td><td>92.22</td><td>21.88</td><td>25</td><td>145</td><td>93.07</td></tr>
+            <tr class="context"><td colspan="7" style="text-align:left">constant_lr (deutlich schwächer, siehe Text oben)</td></tr>
+            <tr><td class="agent">constant_lr</td><td>0</td><td>62.53</td><td>24.08</td><td>0</td><td>129</td><td>63.93</td></tr>
+            <tr><td class="agent">constant_lr</td><td>1</td><td>62.77</td><td>23.41</td><td>0</td><td>120</td><td>69.21</td></tr>
+            <tr><td class="agent">constant_lr</td><td>2</td><td>64.14</td><td>27.28</td><td>0</td><td>131</td><td>67.25</td></tr>
+            <tr><td class="agent">constant_lr</td><td>3</td><td>70.39</td><td>22.01</td><td>0</td><td>128</td><td>69.71</td></tr>
+            <tr><td class="agent">constant_lr</td><td>4</td><td>77.05</td><td>27.33</td><td>4</td><td>151</td><td>74.99</td></tr>
+            <tr><td class="agent">constant_lr</td><td>5</td><td>68.38</td><td>24.06</td><td>0</td><td>138</td><td>67.03</td></tr>
+            <tr class="context"><td colspan="7" style="text-align:left">Bestätigungslauf (kein Sweep, 1 Seed)</td></tr>
+            <tr><td class="agent">ppo_1m_8envs</td><td>0</td><td>90.40</td><td>22.13</td><td>4</td><td>160</td><td>88.62</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <p class="next">
+    <b>Nächster Schritt:</b> <code>constant_lr</code> ist damit erledigt – der
+    LR-Abfall bleibt Standard. Für den finalen großen Lauf spricht das meiste
+    für die einfache <code>baseline</code>- oder <code>no_normalize</code>-
+    Konfiguration (kein klarer Unterschied, <code>no_normalize</code> ist
+    dafür minimal einfacher). <code>reward_shaping</code> bringt bei diesem
+    Budget noch keinen nachweisbaren Vorteil, könnte sich aber erst bei sehr
+    viel längerem Training auszahlen, wenn Baseline und Shaping sich stärker
+    auseinanderentwickeln – das wäre nur mit einem weiteren Sweep bei z. B.
+    5 Mio. Steps zu klären.
+  </p>
+</div>
+
+<script>
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  const configs = [
+    { name: "reward_shaping", seeds: [97.80, 94.98, 85.62, 103.46, 83.90, 89.97], color: "var(--c-shaping)" },
+    { name: "no_normalize", seeds: [90.60, 92.86, 88.12, 96.69, 88.63, 97.09], color: "var(--c-nonorm)" },
+    { name: "n_envs4", seeds: [98.87, 87.09, 84.41, 103.49, 89.49, 77.99], color: "var(--c-nenvs4)" },
+    { name: "baseline", seeds: [83.92, 85.50, 83.03, 91.99, 89.43, 92.22], color: "var(--c-baseline)" },
+    { name: "constant_lr", seeds: [62.53, 62.77, 64.14, 70.39, 77.05, 68.38], color: "var(--c-constlr)" },
+  ];
+  const confirmMean = 90.40;
+
+  configs.forEach((c) => {
+    const mean = c.seeds.reduce((a, b) => a + b, 0) / c.seeds.length;
+    const variance = c.seeds.reduce((a, b) => a + (b - mean) ** 2, 0) / (c.seeds.length - 1);
+    c.mean = mean;
+    c.std = Math.sqrt(variance);
+  });
+
+  const svg = document.getElementById("chart1");
+  const tooltip = document.getElementById("tooltip1");
+  const wrap = svg.parentElement;
+  const W = 800, H = 400;
+  const marginLeft = 44, marginRight = 16, marginTop = 16, marginBottom = 56;
+  const plotW = W - marginLeft - marginRight;
+  const plotH = H - marginTop - marginBottom;
+  const baselineY = marginTop + plotH;
+  const yMax = 120;
+  const yTicks = [0, 30, 60, 90, 120];
+
+  function yScale(v) { return baselineY - (v / yMax) * plotH; }
+
+  yTicks.forEach((t) => {
+    const y = yScale(t);
+    svg.appendChild(el("line", { x1: marginLeft, x2: W - marginRight, y1: y, y2: y, class: t === 0 ? "baseline-line" : "gridline" }));
+    const label = el("text", { x: marginLeft - 10, y: y + 4, class: "axis-label", "text-anchor": "end" });
+    label.textContent = t;
+    svg.appendChild(label);
+  });
+
+  const refY = yScale(confirmMean);
+  svg.appendChild(el("line", { x1: marginLeft, x2: W - marginRight, y1: refY, y2: refY, class: "ref-line" }));
+  const refLabel = el("text", { x: W - marginRight, y: refY - 6, class: "axis-label", "text-anchor": "end" });
+  refLabel.textContent = `ppo_1m_8envs: ${confirmMean.toFixed(1)}`;
+  svg.appendChild(refLabel);
+
+  const slotW = plotW / configs.length;
+  const barW = 84;
+
+  configs.forEach((c, i) => {
+    const cx = marginLeft + slotW * (i + 0.5);
+    const barTop = yScale(c.mean);
+
+    const path = el("path", {
+      d: `M ${cx - barW / 2} ${baselineY}
+          L ${cx - barW / 2} ${barTop + 4}
+          Q ${cx - barW / 2} ${barTop} ${cx - barW / 2 + 4} ${barTop}
+          L ${cx + barW / 2 - 4} ${barTop}
+          Q ${cx + barW / 2} ${barTop} ${cx + barW / 2} ${barTop + 4}
+          L ${cx + barW / 2} ${baselineY} Z`,
+      fill: c.color,
+      opacity: 0.55,
+    });
+    svg.appendChild(path);
+
+    const whiskerTop = yScale(Math.min(yMax, c.mean + c.std));
+    const whiskerBottom = yScale(Math.max(0, c.mean - c.std));
+    svg.appendChild(el("line", { x1: cx, x2: cx, y1: whiskerTop, y2: whiskerBottom, class: "whisker" }));
+    svg.appendChild(el("line", { x1: cx - 8, x2: cx + 8, y1: whiskerTop, y2: whiskerTop, class: "whisker" }));
+    svg.appendChild(el("line", { x1: cx - 8, x2: cx + 8, y1: whiskerBottom, y2: whiskerBottom, class: "whisker" }));
+
+    const jitters = [-18, -10.8, -3.6, 3.6, 10.8, 18];
+    c.seeds.forEach((v, j) => {
+      svg.appendChild(el("circle", { cx: cx + jitters[j], cy: yScale(v), r: 4, class: "seed-dot" }));
+    });
+
+    const valueLabel = el("text", { x: cx, y: whiskerTop - 10, class: "value-label" });
+    valueLabel.textContent = c.mean.toFixed(1);
+    svg.appendChild(valueLabel);
+
+    const nameLabel = el("text", { x: cx, y: baselineY + 22, class: "name-label", "text-anchor": "middle" });
+    nameLabel.textContent = c.name;
+    svg.appendChild(nameLabel);
+
+    const hit = el("rect", { x: marginLeft + slotW * i, y: marginTop, width: slotW, height: plotH, class: "bar-hit" });
+    hit.addEventListener("mousemove", () => {
+      const wrapRect = wrap.getBoundingClientRect();
+      const scaleX = wrapRect.width / W, scaleY = wrapRect.height / H;
+      tooltip.innerHTML = `<b>${c.name}</b><br>Ø: ${c.mean.toFixed(2)}<br>Std (Seeds): ${c.std.toFixed(2)}<br>Seeds: ${c.seeds.map((v) => v.toFixed(1)).join(", ")}`;
+      tooltip.style.left = (cx * scaleX) + "px";
+      tooltip.style.top = (barTop * scaleY) + "px";
+      tooltip.classList.add("visible");
+    });
+    hit.addEventListener("mouseleave", () => tooltip.classList.remove("visible"));
+    svg.appendChild(hit);
+  });
+})();
+</script>
