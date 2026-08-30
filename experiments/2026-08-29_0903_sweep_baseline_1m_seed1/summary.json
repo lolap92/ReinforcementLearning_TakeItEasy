@@ -1,0 +1,20 @@
+[
+  {
+    "name": "ppo_full_board_masked",
+    "n_episodes": 300,
+    "mean": 85.49666666666667,
+    "std": 25.376563772285813,
+    "min": 8.0,
+    "max": 164.0,
+    "avg_invalid_actions_per_episode": 0.0
+  },
+  {
+    "name": "ppo_full_board_masked_best_checkpoint",
+    "n_episodes": 300,
+    "mean": 85.16,
+    "std": 24.595956307219826,
+    "min": 24.0,
+    "max": 159.0,
+    "avg_invalid_actions_per_episode": 0.0
+  }
+]
