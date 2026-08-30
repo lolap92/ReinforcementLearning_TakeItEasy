@@ -21,13 +21,18 @@ unbrauchbar, weil sie mit `score_board()` bewertet und dadurch 15 Züge lang
 faktisch zufällig legt. Analyse und Empfehlungen:
 [`reports/phase7_analysis_report.html`](reports/phase7_analysis_report.html).
 
-Zwei RL-Algorithmen werden trainiert und verglichen:
+Drei Ansätze werden trainiert und verglichen:
 
 - **DQN** ([`train_dqn.py`](train_dqn.py)) – value-based, lernt Q(s,a), mit
   eigenem Action-Masking-Hack (`MaskedDQN`/`MaskedQNetwork`), da
   Stable-Baselines3 kein natives Masking für DQN mitbringt
 - **MaskablePPO** ([`train_ppo.py`](train_ppo.py)) – policy-based, lernt
   direkt π(a|s), mit nativem Action Masking über `sb3-contrib`
+- **Afterstate-Wertfunktion** ([`train_afterstate.py`](train_afterstate.py)) –
+  lernt `V(Zustand nach dem Legen)` statt einer Policy und wählt zur Spielzeit
+  `argmax` über die ≤19 möglichen Folgezustände. Kein SB3, sondern direkt
+  PyTorch – die Konstruktion passt nicht in die SB3-API, weil sie die bekannte
+  Dynamik des Spiels ausnutzt statt sie zu lernen
 
 Action Masking ist in beiden Fällen notwendig, nicht optional: im letzten
 Zug sind 18 von 19 Feldern belegt, ohne Masking probiert/lernt die Policy
@@ -88,6 +93,47 @@ python train_ppo.py --timesteps 1000000 --n-envs 8   # 8 Environments parallel
 
 Weitere Default-Änderungen ggü. dem ursprünglichen Phase-6-Stand: Value-Function jetzt größer als die Policy (`net_arch={"pi": [128,128], "vf": [256,256]}`), da sie mit dem Sparse-Reward die schwerere Lernaufgabe hat.
 
+### Afterstate-Wertfunktion (Phase 8)
+
+```bash
+python train_afterstate.py
+python train_afterstate.py --episodes 1000000 --device cuda
+python train_afterstate.py --lam 1.0 --value-head scalar     # Ablation
+```
+
+Statt einer Policy wird `V(Afterstate)` gelernt – der erwartete Endscore des
+Boards *nachdem* die Kachel gelegt wurde. Zur Spielzeit wird einfach `argmax`
+über alle freien Felder gebildet; das ist bereits eine 1-Ply-Suche und nutzt
+aus, dass die Dynamik des Spiels vollständig bekannt ist (nach dem Legen ist
+der Folgezustand deterministisch, der einzige Zufall ist eine bekannte
+Gleichverteilung über das Restdeck). Gleiche Konstruktion wie bei TD-Gammon
+und den starken 2048-Agenten. Ausführliche Begründung im Docstring des
+Skripts und in [`reports/phase7_analysis_report.html`](reports/phase7_analysis_report.html).
+
+| Parameter | Typ | Default | Bedeutung |
+|---|---|---|---|
+| `--episodes` | int | `300000` | Selbstspiel-Episoden insgesamt (eine Episode = 19 Züge) |
+| `--games-per-iter` | int | `256` | Partien pro Iteration, alle parallel im Gleichschritt. Dadurch lassen sich pro Zug sämtliche Zugmöglichkeiten aller Partien in *einem* Forward-Pass bewerten |
+| `--epochs` | int | `4` | Durchläufe über die frisch gesammelten Daten je Iteration |
+| `--batch-size` | int | `512` | Minibatch-Größe der Gradientenschritte |
+| `--lr` | float | `1e-3` | Startlernrate, fällt cosinusförmig auf 0 |
+| `--lam` / `--lambda` | float | `0.7` | λ-Return: `1.0` = Monte Carlo (unverzerrt, hohe Varianz), `0.0` = TD(0) |
+| `--epsilon-start` / `--epsilon-end` | float | `0.20` / `0.01` | Exploration, linear fallend. Die Zielwerte nutzen immer `max_a V`, sind also off-policy und werden von der Exploration nicht verzerrt |
+| `--hidden` | str | `512,512,512` | Schichtgrößen des MLP |
+| `--value-head` | `twohot` \| `scalar` | `twohot` | `twohot`: Score-Bereich 0–307 in `--atoms` Stützstellen, Cross-Entropy gegen die Two-Hot-Kodierung des Ziels, Wert = Erwartungswert der Verteilung. Bei einer Zielgröße, die aus wenigen großen Sprüngen besteht, lernt das verlässlicher als MSE. `scalar`: klassische Huber-Regression |
+| `--atoms` | int | `51` | Stützstellen des Two-Hot-Kopfs |
+| `--no-line-features` | flag | aus | Die 15 × 8 Linien-Features weglassen (Ablation: wieviel trägt die Feature-Konstruktion, wieviel das Netz bei?) |
+| `--eval-every` / `--eval-games` | int | `25` / `1024` | Zwischenauswertung (greedy, vektorisiert) für TensorBoard und die Best-Checkpoint-Auswahl |
+| `--eval-episodes` | int | `2000` | Finale Auswertung auf der echten `TakeItEasyEnv`, gleiche Seeds wie `train_ppo.py` und `baselines.py` |
+| `--device` | str | `cpu` | Anders als bei PPO lohnt sich hier eine GPU eher: pro Zug werden bis zu `games-per-iter × 19` Afterstates in einem Batch bewertet |
+
+Was das Netz sieht (und `env.py` nicht liefert): 19 × 10 One-Hot fürs Board,
+**27 Dimensionen Restdeck-Multi-Hot**, 9 Zähler je (Richtung, Wert), 15 × 8
+Linien-Features (Füllstand, lebendig, aktueller Wert, `potential_score()`-
+Beitrag, passende Kacheln im Deck, Komplettierungswahrscheinlichkeit) und 2
+Fortschrittswerte – zusammen 348 Dimensionen statt der 60 rohen Zahlen aus
+`env.py`.
+
 ### Hyperparameter-Sweep
 
 Statt eine Konfiguration zu erraten und dafür gleich Millionen Steps zu
@@ -126,7 +172,7 @@ Modelle:
 `greedy_potential` ist die Baseline, an der sich ein trainierter Agent messen
 lassen muss – nicht `greedy`.
 
-Beide Trainingsskripte legen ihre Ergebnisse unter `experiments/<run_id>/` ab
+Alle Trainingsskripte legen ihre Ergebnisse unter `experiments/<run_id>/` ab
 (`run_id` = Zeitstempel + `--tag`): `config.json`/`summary.json` (git-tracked,
 klein), `models/`/`tensorboard/` (gitignored, groß/binär, lokal aus
 `config.json` reproduzierbar – siehe `experiments/README.md`). Zusätzlich
