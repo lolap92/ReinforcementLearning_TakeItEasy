@@ -187,9 +187,27 @@ python oracle.py --episodes 200 --compare experiments/<run_id>/episodes.csv
 
 Beantwortet je Episode: *gegeben genau die 19 Kacheln, die in dieser Partie
 gezogen wurden – was wäre der bestmögliche Score bei freier Platzierung
-gewesen?* Damit zerfällt der Abstand eines Agenten zum Maximum in einen
-vermeidbaren Teil (schlechtes Spiel) und einen unvermeidbaren (Kachelpech
-dieser Ziehung).
+gewesen?*
+
+Die Ziehreihenfolge wird dabei bewusst ignoriert, und das ist exakt richtig:
+weil jede Kachel auf jedes freie Feld darf, ist *jede* Bijektion
+Kacheln → Felder in *jeder* Reihenfolge realisierbar (lege `t_i` auf sein
+Zielfeld – das ist nie belegt, weil die Zuordnung injektiv ist). Das Orakel
+ist damit exakt der Wert des hellsehenden Spielers.
+
+Der Abstand zum Maximum zerfällt entsprechend in drei Teile:
+
+| Anteil | Bedeutung | holbar? |
+|---|---|---|
+| 307 − Orakel | diese Ziehung gibt nicht mehr her | nie |
+| Orakel − V\* | Preis des Online-Spielens: legen, bevor man die nächsten Kacheln kennt | von keiner Online-Policy |
+| V\* − Agent | echte Spielfehler | ja |
+
+`V*` ist die optimale Online-Policy und nicht ausrechenbar, deshalb sind nur
+`307 − Orakel` und die Summe der beiden unteren Zeilen messbar.
+**`Orakel − Agent` ist damit eine obere Schranke dafür, wieviel Suche und
+weiteres Training überhaupt noch bringen können** – nicht der tatsächlich
+holbare Betrag.
 
 Gelöst wird exakt per ganzzahligem Programm (CBC über `pulp`), nicht per
 Heuristik: Zuordnungsvariablen Feld × Kachel plus eine Binärvariable je

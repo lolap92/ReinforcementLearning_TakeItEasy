@@ -15,15 +15,43 @@ Das Orakel beantwortet stattdessen die episodenweise Frage:
     Gegeben *genau die 19 Kacheln*, die in dieser Partie gezogen wurden -
     was wäre der bestmögliche Score bei freier Platzierung gewesen?
 
-Damit zerfällt der Abstand zum Maximum in zwei Teile:
+Warum die Ziehreihenfolge dabei egal ist
+----------------------------------------
+Das Orakel bekommt nur die *Menge* der 19 gezogenen Kacheln, nicht ihre
+Reihenfolge - und das ist kein Schlampigkeitsfehler, sondern exakt richtig.
+In Take It Easy darf jede Kachel auf jedes freie Feld. Nimm ein beliebiges
+Zielboard B (eine Bijektion Kacheln -> Felder) und eine beliebige
+Ziehreihenfolge t1..t19: lege t_i einfach auf B(t_i). Das ist immer legal,
+weil B injektiv ist und B(t_i) damit nicht unter den schon belegten Feldern
+B(t1)..B(t_{i-1}) sein kann. Jede Bijektion ist also in jeder Reihenfolge
+realisierbar - man müsste nur die Zukunft kennen. Das Orakel ist damit exakt
+der Wert des hellsehenden Spielers.
 
-    Orakel − Agent      = vermeidbar (schlechtes Spiel, durch Suche/Training holbar)
-    307    − Orakel     = unvermeidbar (Kachelpech dieser konkreten Ziehung)
+Was der Wert aussagt - und was nicht
+------------------------------------
+Der Abstand zum Maximum zerfällt in DREI Teile, nicht zwei:
 
-WICHTIG: das Orakel ist eine *obere Schranke*, kein erreichbares Ziel. Es
-kennt alle 19 Kacheln von Anfang an; jede Online-Policy sieht immer nur die
-aktuelle. Kein Agent kann das Orakel im Mittel erreichen - der Wert sagt nur,
-wo die Decke liegt.
+    307    − Orakel     diese Ziehung gibt nicht mehr her        -> nie holbar
+    Orakel − V*         Preis des Online-Spielens: man muss legen,
+                        bevor man die nächsten Kacheln kennt     -> von KEINER
+                                                                    Online-Policy
+                                                                    holbar
+    V*     − Agent      echte Spielfehler                        -> holbar
+
+V* ist die optimale Online-Policy (optimales Expectimax über die echte
+Deck-Verteilung). Messbar sind hier nur `307 − Orakel` und die *Summe* der
+beiden unteren Zeilen - ihre Aufteilung nicht, weil V* unbekannt ist (der
+Zustandsraum ist zu groß, um es auszurechnen).
+
+Praktisch heißt das: `Orakel − Agent` ist eine **obere Schranke dafür, wieviel
+Suche und weiteres Training überhaupt noch bringen können**. Ist die Lücke
+klein, lohnt sich Phase 9 nicht mehr. Ist sie groß, ist noch offen, wieviel
+davon holbar ist - aber es ist zumindest möglich. Das Orakel selbst ist
+ausdrücklich kein erreichbares Ziel; kein Agent kann es im Mittel einholen.
+
+Engere Schranke wäre möglich, indem man dasselbe ILP mit nur k sichtbaren
+Kacheln rechnet (Rest per Erwartungswert): je kleiner k, desto näher an V*.
+Deutlich mehr Aufwand, deshalb hier nicht umgesetzt.
 
 Wie
 ---
@@ -314,22 +342,25 @@ def main():
         by_seed = {r["seed"]: r["oracle"] for r in results}
         print(f"\nZerlegung gegen {args.compare}:")
         print(f"{'Agent':38s} {'Ø Agent':>9s} {'Ø Orakel':>9s} {'Lücke':>8s} "
-              f"{'% vom Orakel':>13s} {'Pech':>7s}")
+              f"{'% vom Orakel':>13s} {'Ziehung':>8s}")
         for agent, scores in load_comparison(args.compare, seeds).items():
             agent_scores = np.array([scores[s] for s in seeds])
             gap = oracle_scores - agent_scores
             comparisons[agent] = {
                 "agent_mean": float(agent_scores.mean()),
                 "oracle_mean": float(oracle_scores.mean()),
-                "avoidable_gap": float(gap.mean()),
+                "gap_to_oracle": float(gap.mean()),
                 "pct_of_oracle": float(agent_scores.mean() / oracle_scores.mean() * 100),
-                "unavoidable_gap_to_max": float(MAX_SCORE - oracle_scores.mean()),
+                "gap_oracle_to_max": float(MAX_SCORE - oracle_scores.mean()),
             }
             print(f"{agent:38s} {agent_scores.mean():9.2f} {oracle_scores.mean():9.2f} "
                   f"{gap.mean():8.2f} {comparisons[agent]['pct_of_oracle']:12.1f}% "
-                  f"{MAX_SCORE - oracle_scores.mean():7.2f}")
-        print(f"\n'Lücke' = vermeidbar (bessere Zuege). 'Pech' = {MAX_SCORE} minus Orakel, "
-              f"also durch die Ziehung selbst verloren und von keiner Policy holbar.")
+                  f"{MAX_SCORE - oracle_scores.mean():8.2f}")
+        print(f"\n'Ziehung' = {MAX_SCORE} minus Orakel: durch die Kachelziehung selbst "
+              f"verloren, von keiner Policy holbar.")
+        print("'Luecke'  = Orakel minus Agent. ACHTUNG: das ist eine OBERE SCHRANKE fuer das,")
+        print("            was Suche/Training noch holen koennen - sie enthaelt auch den Preis")
+        print("            des Online-Spielens, den keine Policy vermeiden kann (siehe Docstring).")
 
     config = {
         "run_id": run_id,
