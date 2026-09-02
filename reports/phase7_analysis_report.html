@@ -237,6 +237,63 @@
   </section>
 
   <section>
+    <h2>Nachtrag · Wieviel ist überhaupt noch drin?</h2>
+    <div class="card">
+      <p>
+        Die 307 sind als Messlatte irreführend: sie gelten nur, wenn man sich
+        die 19 Kacheln frei aus dem 27er-Deck aussuchen darf (dieser Modus ist
+        exakt gelöst – 307, erreicht von genau 16 Boards). In einer echten
+        Partie bekommt man 19 zufällige Kacheln, und die geben schlicht nicht
+        so viel her. <code>oracle.py</code> rechnet deshalb je Episode exakt
+        aus (ILP über CBC), was mit <b>genau diesen 19 Kacheln</b> bei freier
+        Platzierung maximal möglich gewesen wäre. 200 Episoden, alle bewiesen
+        optimal:
+      </p>
+      <div class="scroll-table" style="margin-top:16px">
+        <table>
+          <thead><tr><th>Größe</th><th>Ø</th><th>Std</th><th>p10</th><th>Median</th><th>p90</th></tr></thead>
+          <tbody>
+            <tr><td class="agent">Maximum bei freier Kachelwahl</td><td>307</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-ceiling)"></span>Hindsight-Orakel</td><td><b>248,75</b></td><td>14,63</td><td>230</td><td>248</td><td>267</td></tr>
+            <tr><td class="agent"><span class="dot-inline" style="background:var(--c-after)"></span>afterstate_300k (gleiche Seeds)</td><td>158,22</td><td>28,49</td><td>–</td><td>–</td><td>–</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:16px">
+        <b>58,3 Punkte</b> gehen allein durch die Ziehung verloren
+        (307 − 248,75) – von keiner Policy holbar. <b>90,5 Punkte</b> liegen
+        zwischen Agent und Orakel; der Agent erreicht <b>63,6 %</b> des in
+        seinen eigenen Partien Möglichen.
+      </p>
+      <div class="callout muted">
+        <p>
+          Diese 90,5 sind eine <b>obere Schranke</b>, nicht der holbare Betrag.
+          Das Orakel kennt alle 19 Kacheln von Anfang an, jede Online-Policy
+          sieht immer nur die aktuelle – ein Teil der Lücke ist der Preis des
+          Online-Spielens, den auch eine optimale Policy zahlt. Wie groß dieser
+          Teil ist, lässt sich nicht messen: dafür bräuchte man die optimale
+          Online-Policy selbst. Einordnung dazu: das Hill-Climbing, das dem
+          Solver nur als Startlösung dient, kommt mit <i>voller</i>
+          Kachelkenntnis auch nur auf Ø 183,1 – gute Platzierung ist selbst
+          dann noch schwer, wenn man alles weiß.
+        </p>
+      </div>
+      <p>
+        Der interessantere Befund steckt in der Streuung: das Orakel ist mit
+        <b>Std 14,6</b> auffallend eng (p10 230, p90 267) – <b>praktisch jede
+        Ziehung ist ähnlich gut</b>. Die Korrelation zwischen Orakel und
+        Agentenscore je Episode beträgt nur <b>0,38</b>. Anders gesagt: dass
+        eine Partie des Agenten gut oder schlecht ausgeht, liegt kaum am
+        Kachelglück – seine eigene Streuung von 28,5 ist fast doppelt so groß
+        wie die des Orakels und kommt überwiegend aus dem Spiel selbst. Nur in
+        <b>8 %</b> der Partien holt er 80 % oder mehr des Möglichen.
+        Das spricht für Hebel 3 (Suche zur Spielzeit), nicht für „mehr vom
+        Gleichen".
+      </p>
+    </div>
+  </section>
+
+  <section>
     <h2>Wo alle Agenten wirklich stehen</h2>
     <div class="card">
       <div class="legend">

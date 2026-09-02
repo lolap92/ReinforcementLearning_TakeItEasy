@@ -97,6 +97,29 @@ Fokus liegt auf dem **Verständnis der RL-Grundlagen** (nicht primär auf State-
 
    Verifiziert gegen `game.py`: die vektorisierte Scoring-Funktion stimmt exakt mit `score_board()` überein, das Linien-Feature „potential" summiert sich exakt zu `potential_score()`, und ein „Netz", das nur das vorgerechnete Erwartungswert-Feature aufsummiert, reproduziert die `expected_value`-Heuristik (Ø 127,1) – in der schnellen vektorisierten Simulation wie über die echte Env.
 
+9. **✅ Hindsight-Orakel** (erledigt – Standortbestimmung für Phase 9)
+   `oracle.py` rechnet je Episode exakt aus, was mit **genau den 19 gezogenen Kacheln** bei freier Platzierung maximal möglich gewesen wäre – als ganzzahliges Programm (CBC über `pulp`), nicht per Heuristik. Lauf über 200 Episoden (`experiments/2026-09-02_1225_phase9_hindsight_oracle/`), **alle 200 bewiesen optimal**:
+
+   | Größe | Ø | Std | p10 | Median | p90 |
+   |---|---|---|---|---|---|
+   | Maximum bei freier Kachelwahl | 307 | – | – | – | – |
+   | **Hindsight-Orakel** | **248,75** | 14,63 | 230 | 248 | 267 |
+   | afterstate_300k (gleiche Seeds) | 158,22 | 28,49 | – | – | – |
+
+   58,3 Punkte gehen allein durch die Ziehung verloren (307 − 248,75), 90,5 liegen zwischen Agent und Orakel – der Agent erreicht **63,6 %** des in seinen eigenen Partien Möglichen.
+
+   **Lesart, wichtig:** die 90,5 sind eine *obere Schranke*, nicht der holbare Betrag. Der Abstand zum Maximum zerfällt in drei Teile: `307 − Orakel` (nie holbar), `Orakel − V*` (Preis des Online-Spielens, von keiner Policy holbar) und `V* − Agent` (echte Spielfehler). `V*` ist nicht ausrechenbar, also sind nur der erste Teil und die Summe der beiden anderen messbar.
+
+   Die Ziehreihenfolge ignoriert das Orakel bewusst, und das ist exakt richtig: weil jede Kachel auf jedes freie Feld darf, ist jede Bijektion Kacheln → Felder in jeder Reihenfolge realisierbar (lege `t_i` auf sein Zielfeld – nie belegt, weil die Zuordnung injektiv ist). Das Orakel ist damit exakt der Wert des hellsehenden Spielers.
+
+   **Der eigentlich interessante Befund:** das Orakel streut mit Std 14,6 auffallend wenig (p10 230, p90 267) – praktisch jede Ziehung ist ähnlich gut. Die Korrelation zwischen Orakel und Agentenscore je Episode liegt bei nur **0,38**. Dass eine Partie gut oder schlecht ausgeht, liegt also kaum am Kachelglück; die Streuung des Agenten (28,5) ist fast doppelt so groß wie die des Orakels und kommt überwiegend aus dem Spiel selbst. Nur in 8 % der Partien holt er ≥80 % des Möglichen. Das spricht für Suche zur Spielzeit statt für mehr Trainingsbudget.
+
+   Zur Einordnung noch: das Hill-Climbing, das dem Solver nur als Startlösung dient, kommt mit *voller* Kachelkenntnis auch nur auf Ø 183,1 – gute Platzierung ist selbst mit Vollinformation schwer.
+
+   Nebenbefund: der verwandte Modus „alle 27 Kacheln offen, freie Wahl" ist kein Lernproblem, sondern exakt gelöst – Optimum **307**, erreicht von genau 16 Boards (8 davon verschieden bis auf die 180°-Rotation), per Brute Force über die 3^15 Linien-Wertzuweisungen in Sekunden findbar. Ein Netz darauf zu trainieren hieße, eines von 16 auswendig zu lernen.
+
+   Das Orakel ist **nicht Teil des Trainings** und soll es nicht werden: 5–15 s ILP je Episode gegen ~500 Selbstspiel-Episoden/s sind vier bis fünf Größenordnungen Unterschied, und inhaltlich wäre es falsch – `V(Afterstate)` muss der Erwartungswert über künftige Ziehungen sein, das Orakel ist ein Maximum mit Hindsight. Darauf zu trainieren hieße systematischer Hindsight-Bias.
+
 ## Bisheriger Stand (Details zu Phase 2)
 
 ### Dateien
@@ -148,28 +171,32 @@ python env.py    # sollte Board-Render + Random-Agent-Score ausgeben
 
 ## Nächster Schritt
 
-**Phase 9: Suche zur Spielzeit (Hebel 3 aus dem Phase-7-Report).** Der Agent
-bildet aktuell nur `argmax` über die Folgezustände, also 1 Ply. Weil das
-Restdeck bekannt ist, lässt sich über die nächste Kachel exakt
-erwartungswerten statt zu sampeln: für jeden Zug den Erwartungswert über alle
-noch möglichen nächsten Kacheln bilden. Bei ≤19 Zügen × ≤27 Kacheln ist
-2-Ply-Expectimax problemlos rechenbar, in den letzten ~6 Zügen sogar
-vollständige Suche bis zum Ende. Der Abstand von Ø 160,4 zur 167er-Marke, die
-als praktische Obergrenze bei zufälligem Kachelzug gilt, ist genau der
-Bereich, in dem echte Suche wirken sollte.
+**Phase 9: Expectimax zur Spielzeit.** Das Orakel (Phase 9-Vorarbeit, oben)
+hat die Frage beantwortet, ob sich Suche noch lohnt: der Agent holt 63,6 % des
+in seinen Partien Möglichen, und seine Streuung kommt überwiegend aus dem
+Spiel selbst, nicht aus dem Kachelglück. Konkret: weil das Restdeck bekannt
+ist, lässt sich über die nächste Kachel exakt erwartungswerten statt zu
+sampeln. Bei ≤19 Zügen × ≤27 Kacheln ist 2-Ply-Expectimax problemlos
+rechenbar, in den letzten ~6 Zügen sogar vollständige Suche bis zum Ende.
+Braucht keine Änderung an der Wertfunktion – nur eine andere
+Kandidatenauswertung zur Spielzeit.
 
 Daneben, in absteigender Priorität:
 
 - **Längerer Lauf.** Die Lernkurve stieg bis zum letzten Update.
-  `--episodes 3000000` wäre etwa 3,5 Stunden CPU und sollte allein durch das
-  Budget noch zulegen.
+  `--episodes 3000000` wäre etwa 3,5 Stunden CPU.
 - **Ablationen.** `--no-line-features`, `--value-head scalar` und `--lam 1.0`
   sind vorbereitet und würden zeigen, wieviel von den 160,4 auf die
   Feature-Konstruktion und wieviel auf das eigentliche Lernen entfällt. Für
-  ein Lernprojekt ist das die interessanteste offene Frage.
-- **Mehrere Seeds.** Bisher genau ein Lauf. Nach den Erfahrungen aus Phase 6
-  (Seed-Streuung ±4 bis ±9 bei PPO) sollte auch hier über ≥3 Seeds gemessen
-  werden, bevor 160,4 als belastbare Zahl gilt.
+  ein Lernprojekt die interessanteste offene Frage.
+- **Mehrere Seeds.** Bisher genau ein Afterstate-Lauf.
+- **k-Lookahead als Curriculum.** „Wähle eine der nächsten k aufgedeckten
+  Kacheln": k=1 ist das reguläre Spiel, k=27 der vollständig offene Modus.
+  Braucht nur eine andere Kandidatenerzeugung in `play_batch` plus `k/27` als
+  Eingabefeature (sonst widersprechen sich die Zielwerte: bei k=1 ist V ein
+  Erwartungswert, bei k=27 ein Maximum) und einen zweiten 27-dim Block
+  „aufgedeckt" im Encoder.
 - **`replay.py` erweitern.** Lädt aktuell nur SB3-Modelle (`.zip`); das
-  Afterstate-Modell liegt als `.pt` mit eigener Architektur-Config vor und
-  lässt sich noch nicht nachspielen.
+  Afterstate-Modell liegt als `.pt` vor. Die Orakel-Boards
+  (`oracle_boards.json`) wären daneben eine gute Vergleichsansicht: dasselbe
+  Kachelset, einmal wie der Agent es gelegt hat und einmal optimal.

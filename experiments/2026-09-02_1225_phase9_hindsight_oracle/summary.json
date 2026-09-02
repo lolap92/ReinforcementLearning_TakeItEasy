@@ -1,0 +1,10 @@
+[
+  {
+    "name": "hindsight_oracle",
+    "n_episodes": 200,
+    "mean": 248.75,
+    "std": 14.627286146103796,
+    "min": 205.0,
+    "max": 291.0
+  }
+]

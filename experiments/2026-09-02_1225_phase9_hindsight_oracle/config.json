@@ -1,0 +1,35 @@
+{
+  "run_id": "2026-09-02_1225_phase9_hindsight_oracle",
+  "tag": "phase9_hindsight_oracle",
+  "timestamp": "2026-09-02T12:25:37+00:00",
+  "git_commit": "df028d0",
+  "env": "TakeItEasyEnv",
+  "algorithm": "Hindsight-Orakel (exaktes ILP, CBC via pulp)",
+  "episodes": 200,
+  "master_seed": 0,
+  "episode_seeds": [
+    1,
+    200
+  ],
+  "time_limit_per_episode": 600,
+  "jobs": 4,
+  "all_proven_optimal": true,
+  "unproven_seeds": [],
+  "compare": "experiments/2026-08-30_0726_afterstate_300k/episodes.csv",
+  "comparisons": {
+    "afterstate_full_board": {
+      "agent_mean": 158.225,
+      "oracle_mean": 248.75,
+      "pct_of_oracle": 63.608040201005025,
+      "gap_to_oracle": 90.525,
+      "gap_oracle_to_max": 58.25
+    },
+    "afterstate_full_board_best_checkpoint": {
+      "agent_mean": 157.85,
+      "oracle_mean": 248.75,
+      "pct_of_oracle": 63.4572864321608,
+      "gap_to_oracle": 90.9,
+      "gap_oracle_to_max": 58.25
+    }
+  }
+}
