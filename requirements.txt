@@ -4,3 +4,4 @@ sb3-contrib>=2.3
 numpy
 tensorboard
 torch          # nur für train_afterstate.py (Phase 8), SB3 bringt sein eigenes mit
+pulp           # nur für oracle.py (exaktes ILP, bringt CBC mit)

@@ -178,6 +178,44 @@ klein), `models/`/`tensorboard/` (gitignored, groß/binär, lokal aus
 `config.json` reproduzierbar – siehe `experiments/README.md`). Zusätzlich
 wird automatisch eine Zeile in `EXPERIMENTS.md` angehängt.
 
+## Hindsight-Orakel
+
+```bash
+python oracle.py --episodes 200
+python oracle.py --episodes 200 --compare experiments/<run_id>/episodes.csv
+```
+
+Beantwortet je Episode: *gegeben genau die 19 Kacheln, die in dieser Partie
+gezogen wurden – was wäre der bestmögliche Score bei freier Platzierung
+gewesen?* Damit zerfällt der Abstand eines Agenten zum Maximum in einen
+vermeidbaren Teil (schlechtes Spiel) und einen unvermeidbaren (Kachelpech
+dieser Ziehung).
+
+Gelöst wird exakt per ganzzahligem Programm (CBC über `pulp`), nicht per
+Heuristik: Zuordnungsvariablen Feld × Kachel plus eine Binärvariable je
+(Linie, Wert), zwei Verschärfungen (Vorfilter auf Linien, für die überhaupt
+genug passende Kacheln gezogen wurden, und ein Kardinalitätsschnitt je
+Richtung und Wert) und eine Startlösung aus Hill-Climbing. Jede Lösung wird
+gegengeprüft – das Board muss exakt aus den gezogenen Kacheln bestehen und
+`game.score_board()` muss unabhängig denselben Wert liefern wie die
+ILP-Zielfunktion.
+
+**Das Orakel ist eine obere Schranke, kein erreichbares Ziel.** Es kennt alle
+19 Kacheln von Anfang an, jede Online-Policy sieht immer nur die aktuelle.
+
+| Parameter | Typ | Default | Bedeutung |
+|---|---|---|---|
+| `--episodes` | int | `200` | Anzahl Episoden. Jede kostet 5–15 s CPU, deshalb Stichprobe statt aller 2000 Eval-Episoden |
+| `--seed` | int | `0` | Master-Seed; ausgewertet werden `seed+1 .. seed+episodes` – gleiche Konvention wie in den Trainingsskripten, damit die Seeds überlappen |
+| `--jobs` | int | alle Kerne | Parallele Prozesse |
+| `--time-limit` | float | `600` | Sekunden je Episode für CBC. Nicht bewiesen optimale Episoden werden gesondert ausgewiesen |
+| `--compare` | str | – | Pfad zu einer `episodes.csv`; rechnet die Zerlegung gepaart über die gemeinsamen Seeds |
+
+Zur Einordnung: der verwandte Modus „alle 27 Kacheln offen, freie Wahl" ist
+kein Lernproblem, sondern exakt gelöst – Optimum **307**, erreicht von genau
+16 Boards (8 davon verschieden bis auf die 180°-Rotation), per Brute Force
+über die 3^15 Linien-Wertzuweisungen in wenigen Sekunden findbar.
+
 ## TensorBoard
 
 Während oder nach einem Trainingslauf, in einem zweiten Terminal:
