@@ -15,7 +15,21 @@ Nutzung
     python play.py --model experiments/<run_id>/models/final_model.pt
     python play.py --model experiments/<run_id>/models/final_model.zip --algo ppo
     python play.py --model ... --seed 42          # feste Partie, wiederholbar
-    python play.py --model ... --html             # zusätzlich als Bild-Vergleich
+    python play.py --model ... --no-live          # ohne Browser-Ansicht
+    python play.py --model ... --html             # zusätzlich Einzelbretter wie replay.py
+
+Live-Ansicht
+------------
+Standardmäßig wird nach jedem Zug `replay/play_<seed>.html` neu geschrieben
+und beim ersten Zug im Browser geöffnet: das Brett als echte Kachelgrafik
+(board_render.py), mit Feldnummern in den freien Feldern, dem zuletzt
+gelegten Feld umrandet und der aktuellen Kachel daneben. Die Seite lädt sich
+per meta-refresh jede Sekunde selbst neu - kein Server nötig, das Ganze läuft
+über file://. Am Ende wird die Refresh-Zeile weggelassen und stattdessen dein
+Brett neben dem des Netzes gezeigt. `--no-live` schaltet das ab.
+
+Gespielt wird trotzdem im Terminal - die Textausgabe bleibt der Ort, an dem
+man Feldnummern eintippt, die Grafik ist zum Draufschauen.
 
 Unterstützt beide Modellarten aus diesem Repo:
   *.pt   -> Afterstate-Wertfunktion (train_afterstate.py), --algo wird nicht gebraucht
@@ -33,7 +47,11 @@ Trainingslauf noch vorhanden sein.
 """
 
 import argparse
+import os
 import random
+import shutil
+import subprocess
+import webbrowser
 from pathlib import Path
 
 import numpy as np
@@ -159,6 +177,113 @@ def score_breakdown(board):
 
 
 # ---------------------------------------------------------------------------
+# Live-Ansicht im Browser
+# ---------------------------------------------------------------------------
+
+def open_in_browser(path):
+    """Chrome bevorzugt (wie in den Trainingsskripten), sonst Standardbrowser.
+    Bewusst hier lokal statt aus train_ppo/train_afterstate importiert - die
+    ziehen sb3 bzw. torch mit, was ein reines Spiel nicht braucht."""
+    url = path.resolve().as_uri()
+    candidates = [
+        shutil.which("chrome"),
+        shutil.which("google-chrome"),
+        os.path.join(os.environ.get("PROGRAMFILES", r"C:\Program Files"),
+                     r"Google\Chrome\Application\chrome.exe"),
+        os.path.join(os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"),
+                     r"Google\Chrome\Application\chrome.exe"),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                     r"Google\Chrome\Application\chrome.exe"),
+    ]
+    chrome = next((c for c in candidates if c and Path(c).exists()), None)
+    if chrome:
+        try:
+            subprocess.Popen([chrome, url])
+            return
+        except Exception:
+            pass
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+
+
+PAGE_STYLE = """
+  * { box-sizing: border-box; }
+  body { margin:0; background:#0e1f19; color:#e9efec;
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+         padding:28px 20px 40px; }
+  .wrap { max-width:1180px; margin:0 auto; display:flex; flex-direction:column; gap:22px; }
+  header { display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; }
+  h1 { font-size:22px; font-weight:650; margin:0; letter-spacing:-0.01em; }
+  .meta { font-size:13px; color:#8fa79c; font-variant-numeric:tabular-nums; }
+  .cols { display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap; justify-content:center; }
+  .panel { display:flex; flex-direction:column; gap:10px; align-items:center; }
+  .panel h2 { font-size:13px; font-weight:650; letter-spacing:0.06em; text-transform:uppercase;
+              color:#8fa79c; margin:0; }
+  .score { font-size:30px; font-weight:700; font-variant-numeric:tabular-nums; margin:0; }
+  .tile-now { display:flex; align-items:center; gap:14px; background:#142b23;
+              border:1px solid #23453a; border-radius:12px; padding:12px 18px; }
+  .tile-now .label { font-size:13px; color:#8fa79c; }
+  svg { max-width:100%; height:auto; display:block; }
+  .verdict { font-size:19px; font-weight:650; text-align:center; padding:14px;
+             background:#142b23; border:1px solid #23453a; border-radius:12px; }
+  .hint { font-size:13px; color:#8fa79c; text-align:center; }
+"""
+
+
+def play_page(board, seed, step, tile, score, last_cell,
+              agent_board=None, agent_score=None, agent_name="Netz"):
+    """Die Live-Seite. Solange `agent_board` fehlt, läuft die Partie noch:
+    dann lädt sich die Seite selbst nach und das Brett des Netzes bleibt
+    verdeckt (sonst könnte man abschreiben)."""
+    from board_render import board_to_svg, tile_svg
+
+    running = agent_board is None
+    refresh = '<meta http-equiv="refresh" content="1">' if running else ""
+
+    if running:
+        head = (
+            f'<header><h1>Zug {step + 1} von 19</h1>'
+            f'<span class="meta">Seed {seed} &middot; Gegner: {agent_name}</span></header>'
+            f'<div class="tile-now">'
+            f'<span class="label">Diese Kachel legen:</span>{tile_svg(*tile)}'
+            f'<span class="label">Feldnummer im Terminal eingeben</span></div>'
+        )
+        panels = (
+            f'<div class="panel"><h2>Dein Brett</h2>'
+            f'<p class="score">{score:.0f}</p>'
+            f'{board_to_svg(board, labels=True, highlight=last_cell)}</div>'
+        )
+        footer = ('<p class="hint">Freie Felder zeigen ihre Nummer. '
+                  'Das gelb umrandete Feld war dein letzter Zug. '
+                  'Diese Seite aktualisiert sich von selbst.</p>')
+    else:
+        diff = score - agent_score
+        if diff > 0:
+            verdict = f"Du gewinnst mit {diff:.0f} Punkten Vorsprung."
+        elif diff < 0:
+            verdict = f"{agent_name} gewinnt mit {-diff:.0f} Punkten Vorsprung."
+        else:
+            verdict = "Unentschieden."
+        head = (f'<header><h1>Endstand</h1>'
+                f'<span class="meta">Seed {seed} &middot; dieselben 19 Kacheln für beide</span></header>')
+        panels = (
+            f'<div class="panel"><h2>Dein Brett</h2><p class="score">{score:.0f}</p>'
+            f'{board_to_svg(board, highlight=last_cell)}</div>'
+            f'<div class="panel"><h2>{agent_name}</h2><p class="score">{agent_score:.0f}</p>'
+            f'{board_to_svg(agent_board)}</div>'
+        )
+        footer = (f'<div class="verdict">{verdict}</div>'
+                  f'<p class="hint">Dieselbe Partie nochmal: --seed {seed}</p>')
+
+    return (f'<!doctype html>\n<html lang="de"><head><meta charset="utf-8">{refresh}'
+            f'<title>Take It Easy - Seed {seed}</title><style>{PAGE_STYLE}</style></head>'
+            f'<body><div class="wrap">{head}<div class="cols">{panels}</div>{footer}</div>'
+            f'</body></html>')
+
+
+# ---------------------------------------------------------------------------
 # Spielschleife
 # ---------------------------------------------------------------------------
 
@@ -208,8 +333,12 @@ def main():
                         help="Nur für .zip-Modelle nötig.")
     parser.add_argument("--seed", type=int, default=None,
                         help="Feste Kachelfolge (wiederholbar). Ohne Angabe zufällig.")
+    parser.add_argument("--no-live", action="store_true",
+                        help="Die Live-Ansicht im Browser abschalten (Default: an, "
+                             "schreibt nach jedem Zug replay/play_<seed>.html).")
     parser.add_argument("--html", action="store_true",
-                        help="Am Ende beide Bretter als HTML-Vergleich in replay/ schreiben.")
+                        help="Am Ende zusätzlich beide Bretter als Einzelseiten in "
+                             "replay/ schreiben, im Format von replay.py.")
     args = parser.parse_args()
 
     seed = args.seed if args.seed is not None else random.randrange(2**31 - 1)
@@ -222,13 +351,26 @@ def main():
     agent_board, agent_score, agent_moves = play_agent_episode(act, seed)
     print("fertig.\n")
 
+    live_path = None
+    if not args.no_live:
+        REPLAY_DIR.mkdir(exist_ok=True)
+        live_path = REPLAY_DIR / f"play_{seed}.html"
+
     env = TakeItEasyEnv()
     obs, info = env.reset(seed=seed)
     terminated, human_score = False, 0.0
-    step = 0
+    step, last_cell = 0, None
 
     while not terminated:
         running, _complete = score_breakdown(env.board)
+        if live_path is not None:
+            live_path.write_text(play_page(
+                list(env.board), seed, step, env.current_tile, running, last_cell,
+                agent_name=model_name,
+            ))
+            if step == 0:
+                print(f"Live-Ansicht: {live_path.relative_to(REPO_ROOT)}")
+                open_in_browser(live_path)
         print("=" * 75)
         print(f"Zug {step + 1}/19        fertige Linien bisher: {running} Punkte")
         print(render_board(env.board))
@@ -239,7 +381,7 @@ def main():
                   f"{agent_score:.0f} Punkte gemacht.")
             return
         obs, reward, terminated, _truncated, info = env.step(cell)
-        step += 1
+        step, last_cell = step + 1, cell
         if terminated:
             human_score = reward
 
@@ -259,6 +401,14 @@ def main():
     else:
         print("Unentschieden.")
     print(f"Diese Partie nochmal (auch gegen ein anderes Modell): --seed {seed}")
+
+    if live_path is not None:
+        # Ohne meta-refresh, dafür jetzt mit dem Brett des Netzes daneben.
+        live_path.write_text(play_page(
+            human_board, seed, step, None, human_score, last_cell,
+            agent_board=agent_board, agent_score=agent_score, agent_name=model_name,
+        ))
+        print(f"Endstand als Bild: {live_path.relative_to(REPO_ROOT)}")
 
     if args.html:
         from board_render import board_to_html
