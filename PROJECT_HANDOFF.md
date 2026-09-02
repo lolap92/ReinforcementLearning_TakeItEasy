@@ -169,6 +169,34 @@ python env.py    # sollte Board-Render + Random-Agent-Score ausgeben
 - `observation_space` / `action_space` als formale Deklaration für SB3, um automatisch passende Policy-Netzwerke zu bauen
 - Value-based (DQN: lernt Q(S,A), wählt Maximum) vs. Policy-based (PPO: lernt direkt π(A|S) als Verteilung)
 
+## Skalierungstest: 300k → 3 Mio. Episoden
+
+Auf Empfehlung aus Phase 8 lokal nachtrainiert mit GPU und
+`--games-per-iter 1024`: `experiments/2026-09-02_1456_afterstate_3m/`.
+**Ø 163,15** (Endmodell) bzw. 163,57 (Best-Checkpoint) über 2000 Episoden –
+gegenüber Ø 160,38 des 300k-Laufs ein gepaart statistisch signifikanter, aber
+kleiner Unterschied (+2,77 Punkte, 95%-CI [1,39; 4,15], p < 0,001 über
+identische Eval-Seeds).
+
+Eingeordnet gegen das Hindsight-Orakel (dieselben 200 Seeds wie der
+Orakel-Lauf): der Anteil vom episodenspezifischen Optimum steigt nur von
+63,6 % auf 65,5 %. Zehnfacher Trainingsaufwand holt also nur 1,9
+Prozentpunkte zusätzlich – deutlich weniger, als der Sprung von PPO zu
+Afterstate (300k) gebracht hatte (43,4 % → 63,6 %). Die Skalierungsrate
+(2,8 Punkte je Verzehnfachung der Episoden) liegt sogar unter der, die PPO
+zwischen 1 und 25 Mio. Steps noch hatte (11,5 Punkte je Verzehnfachung,
+Phase 7), obwohl PPO zu dem Zeitpunkt schon deutlich abnehmenden Grenznutzen
+zeigte.
+
+Wichtige Einschränkung: `--games-per-iter` (256→1024) und Device (CPU→GPU)
+änderten sich mit, daher kein sauberes Eine-Variable-Experiment wie die
+PPO-300k/1M/25M-Reihe. Voller Report mit allen Diagrammen und der
+Orakel-Zerlegung für PPO/300k/3M: `reports/phase8_scaling_report.html`.
+
+**Fazit:** der Engpass ist endgültig nicht mehr das Trainingsbudget. Phase 9
+(Expectimax-Suche zur Spielzeit) bleibt der einzige Hebel mit noch
+nachgewiesenem offenem Potenzial (85–90 Punkte Lücke zum Orakel).
+
 ## Nächster Schritt
 
 **Phase 9: Expectimax zur Spielzeit.** Das Orakel (Phase 9-Vorarbeit, oben)

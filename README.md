@@ -19,7 +19,8 @@ Heuristiken in `baselines.py` (`greedy_potential` Ø 120,9, `expected_value`
 Ø 128,9). Die ursprüngliche `greedy`-Baseline (Ø 27,6) war als Messlatte
 unbrauchbar, weil sie mit `score_board()` bewertet und dadurch 15 Züge lang
 faktisch zufällig legt. Analyse und Empfehlungen:
-[`reports/phase7_analysis_report.html`](reports/phase7_analysis_report.html).
+[`reports/phase7_analysis_report.html`](reports/phase7_analysis_report.html). Skalierungstest (300k vs. 3 Mio. Episoden):
+[`reports/phase8_scaling_report.html`](reports/phase8_scaling_report.html).
 
 Drei Ansätze werden trainiert und verglichen:
 
