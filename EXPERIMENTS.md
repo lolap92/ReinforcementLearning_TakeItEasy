@@ -124,3 +124,5 @@ Ein Lauf pro Zeile. Details (Config, Kennzahlen, Trajektorien) unter `experiment
 | 2026-08-30 | `2026-08-30_0726_afterstate_300k` | afterstate_300k | afterstate_full_board | 2000 | 160.38 | 27.28 | 55 | 256 | 2d16961 |
 | 2026-08-30 | `2026-08-30_0726_afterstate_300k` | afterstate_300k | afterstate_full_board_best_checkpoint | 2000 | 159.53 | 27.06 | 65 | 256 | 2d16961 |
 | 2026-09-02 | `2026-09-02_1225_phase9_hindsight_oracle` | phase9_hindsight_oracle | hindsight_oracle | 200 | 248.75 | 14.63 | 205 | 291 | df028d0 |
+| 2026-09-02 | `2026-09-02_1456_afterstate_3m` | afterstate_3m | afterstate_full_board | 2000 | 163.15 | 27.17 | 55 | 249 | b43ebc0 |
+| 2026-09-02 | `2026-09-02_1456_afterstate_3m` | afterstate_3m | afterstate_full_board_best_checkpoint | 2000 | 163.57 | 26.68 | 55 | 249 | b43ebc0 |

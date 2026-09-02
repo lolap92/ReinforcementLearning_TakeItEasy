@@ -1,0 +1,32 @@
+{
+  "run_id": "2026-09-02_1456_afterstate_3m",
+  "tag": "afterstate_3m",
+  "timestamp": "2026-09-02T14:56:39+02:00",
+  "git_commit": "b43ebc0",
+  "env": "TakeItEasyEnv",
+  "algorithm": "Afterstate-Wertfunktion (lambda-Return, Selbstspiel)",
+  "hyperparameters": {
+    "episodes": 2999296,
+    "iterations": 2929,
+    "games_per_iter": 1024,
+    "epochs": 4,
+    "batch_size": 512,
+    "learning_rate": "cosine(0.001 -> 0)",
+    "lambda": 0.7,
+    "gamma": 1.0,
+    "epsilon": "linear(0.2 -> 0.01)",
+    "hidden": [
+      512,
+      512,
+      512
+    ],
+    "value_head": "twohot",
+    "atoms": 51,
+    "line_features": true,
+    "feature_dim": 348,
+    "parameters": 733235
+  },
+  "eval_episodes": 2000,
+  "master_seed": 0,
+  "device": "cuda"
+}
