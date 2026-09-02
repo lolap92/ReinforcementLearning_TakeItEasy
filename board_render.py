@@ -149,25 +149,48 @@ def _cell_position(cell_idx):
     raise ValueError(f"Unbekannter Feld-Index: {cell_idx}")
 
 
-def board_to_svg(board):
+def board_to_svg(board, labels=False, highlight=None):
     """Ganzes Brett (Liste[19] von (v,l,r)-Tupeln oder None) als eine SVG-
-    Grafik, im gleichen Spalten-Layout wie env.py's Text-Render."""
+    Grafik, im gleichen Spalten-Layout wie env.py's Text-Render.
+
+    labels=True schreibt in jedes freie Feld seine Nummer - ohne die könnte
+    man beim Spielen (play.py) nicht sagen, wohin man legen will, weil die
+    Grafik im Gegensatz zur Textausgabe keine Indizes trägt.
+    highlight=<Feldnummer> umrandet ein Feld (der zuletzt gelegte Zug).
+    """
     margin = 30
     max_line = 2 * (max(len(col) for col in ROWS) - 1)
     width = margin * 2 + (len(ROWS) - 1) * COL_STEP + TILE_W
     height = margin * 2 + max_line * LINE_STEP + TILE_H
 
-    groups = []
+    # Zeichenreihenfolge in drei Lagen, sonst überdecken benachbarte Felder
+    # einander: benachbarte Sechsecke berühren sich, und die Wert-Badges
+    # sitzen genau auf den gemeinsamen Ecken. Erst alle leeren Platzhalter,
+    # dann alle echten Kacheln (so schneidet nie ein leeres Feld die Zahlen
+    # einer bereits gelegten Nachbarkachel ab), zuletzt die Hervorhebung.
+    empty_cells, placed, overlay = [], [], []
     for cell_idx in range(19):
         col_idx, line = _cell_position(cell_idx)
         cx = margin + TILE_W / 2 + col_idx * COL_STEP
         cy = margin + TILE_H / 2 + line * LINE_STEP
         tile = board[cell_idx]
         if tile is None:
-            groups.append(tile_group(None, None, None, cx, cy, empty=True))
+            empty_cells.append(tile_group(None, None, None, cx, cy, empty=True))
+            if labels:
+                empty_cells.append(
+                    f'<text x="{cx:.1f}" y="{cy:.1f}" font-size="30" font-weight="700" '
+                    f'font-family="Arial, sans-serif" fill="#7d8a84" text-anchor="middle" '
+                    f'dominant-baseline="central">{cell_idx}</text>'
+                )
         else:
             v, l, r_val = tile
-            groups.append(tile_group(v, l, r_val, cx, cy))
+            placed.append(tile_group(v, l, r_val, cx, cy))
+        if highlight is not None and cell_idx == highlight:
+            pts = " ".join(f"{x:.1f},{y:.1f}" for x, y in _hex_points(cx, cy, R + 5))
+            overlay.append(
+                f'<polygon points="{pts}" fill="none" stroke="#ffd166" stroke-width="4"/>'
+            )
+    groups = empty_cells + placed + overlay
 
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.1f} {height:.1f}" '

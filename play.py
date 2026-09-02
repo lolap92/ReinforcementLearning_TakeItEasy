@@ -15,7 +15,29 @@ Nutzung
     python play.py --model experiments/<run_id>/models/final_model.pt
     python play.py --model experiments/<run_id>/models/final_model.zip --algo ppo
     python play.py --model ... --seed 42          # feste Partie, wiederholbar
-    python play.py --model ... --html             # zusätzlich als Bild-Vergleich
+    python play.py --model ... --no-live          # ohne Browser-Ansicht
+    python play.py --model ... --no-best          # ohne Maximum-Berechnung am Ende
+    python play.py --model ... --html             # zusätzlich Einzelbretter wie replay.py
+
+Live-Ansicht
+------------
+Standardmäßig wird nach jedem Zug `replay/play_<seed>.html` neu geschrieben
+und beim ersten Zug im Browser geöffnet: das Brett als echte Kachelgrafik
+(board_render.py), mit Feldnummern in den freien Feldern, dem zuletzt
+gelegten Feld umrandet und der aktuellen Kachel daneben. Die Seite lädt sich
+per meta-refresh jede Sekunde selbst neu - kein Server nötig, das Ganze läuft
+über file://. Am Ende wird die Refresh-Zeile weggelassen und stattdessen dein
+Brett neben dem des Netzes gezeigt. `--no-live` schaltet das ab.
+
+Gespielt wird trotzdem im Terminal - die Textausgabe bleibt der Ort, an dem
+man Feldnummern eintippt, die Grafik ist zum Draufschauen.
+
+Am Ende wird zusätzlich ausgerechnet, was mit *genau diesen 19 Kacheln*
+maximal möglich gewesen wäre (exakt per ILP, siehe oracle.py) und als drittes
+Brett danebengestellt. Das kostet ein paar Sekunden und braucht `pulp`;
+`--no-best` schaltet es ab. Wichtig zur Einordnung: dieses Brett kennt alle
+19 Kacheln von Anfang an, ist also eine obere Schranke und kein Ziel, das
+eine Online-Policy erreichen könnte.
 
 Unterstützt beide Modellarten aus diesem Repo:
   *.pt   -> Afterstate-Wertfunktion (train_afterstate.py), --algo wird nicht gebraucht
@@ -33,7 +55,11 @@ Trainingslauf noch vorhanden sein.
 """
 
 import argparse
+import os
 import random
+import shutil
+import subprocess
+import webbrowser
 from pathlib import Path
 
 import numpy as np
@@ -159,6 +185,156 @@ def score_breakdown(board):
 
 
 # ---------------------------------------------------------------------------
+# Live-Ansicht im Browser
+# ---------------------------------------------------------------------------
+
+def open_in_browser(path):
+    """Chrome bevorzugt (wie in den Trainingsskripten), sonst Standardbrowser.
+    Bewusst hier lokal statt aus train_ppo/train_afterstate importiert - die
+    ziehen sb3 bzw. torch mit, was ein reines Spiel nicht braucht."""
+    url = path.resolve().as_uri()
+    candidates = [
+        shutil.which("chrome"),
+        shutil.which("google-chrome"),
+        os.path.join(os.environ.get("PROGRAMFILES", r"C:\Program Files"),
+                     r"Google\Chrome\Application\chrome.exe"),
+        os.path.join(os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"),
+                     r"Google\Chrome\Application\chrome.exe"),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                     r"Google\Chrome\Application\chrome.exe"),
+    ]
+    chrome = next((c for c in candidates if c and Path(c).exists()), None)
+    if chrome:
+        try:
+            subprocess.Popen([chrome, url])
+            return
+        except Exception:
+            pass
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+
+
+PAGE_STYLE = """
+  * { box-sizing: border-box; }
+  body { margin:0; background:#0e1f19; color:#e9efec;
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+         padding:28px 20px 40px; }
+  .wrap { max-width:1460px; margin:0 auto; display:flex; flex-direction:column; gap:22px; }
+  header { display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; }
+  h1 { font-size:22px; font-weight:650; margin:0; letter-spacing:-0.01em; }
+  .meta { font-size:13px; color:#8fa79c; font-variant-numeric:tabular-nums; }
+  .cols { display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap; justify-content:center; }
+  .panel { display:flex; flex-direction:column; gap:10px; align-items:center;
+           flex:0 1 440px; min-width:250px; }
+  .panel h2 { font-size:13px; font-weight:650; letter-spacing:0.06em; text-transform:uppercase;
+              color:#8fa79c; margin:0; }
+  .score { font-size:30px; font-weight:700; font-variant-numeric:tabular-nums; margin:0; }
+  .note { font-size:12px; color:#8fa79c; margin:-6px 0 0; }
+  .tile-now { display:flex; align-items:center; gap:14px; background:#142b23;
+              border:1px solid #23453a; border-radius:12px; padding:12px 18px; }
+  .tile-now .label { font-size:13px; color:#8fa79c; }
+  svg { max-width:100%; height:auto; display:block; }
+  .panel svg { width:100%; }
+  .verdict { font-size:17px; font-weight:600; line-height:1.55; text-align:center; padding:16px 20px;
+             background:#142b23; border:1px solid #23453a; border-radius:12px; }
+  .hint { font-size:13px; color:#8fa79c; text-align:center; }
+"""
+
+
+def _panel(title, svg, score, note=""):
+    # Die Notizzeile wird immer gerendert (notfalls leer), damit die Bretter
+    # nebeneinander auf gleicher Höhe beginnen.
+    return (f'<div class="panel"><h2>{title}</h2><p class="score">{score:.0f}</p>'
+            f'<p class="note">{note or "&nbsp;"}</p>{svg}</div>')
+
+
+def play_page(board, seed, step, tile, score, last_cell,
+              agent_board=None, agent_score=None, agent_name="Netz",
+              best_board=None, best_score=None, best_proven=True):
+    """Die Live-Seite. Solange `agent_board` fehlt, läuft die Partie noch:
+    dann lädt sich die Seite selbst nach und das Brett des Netzes bleibt
+    verdeckt (sonst könnte man abschreiben).
+
+    `best_board`/`best_score` sind das Hindsight-Orakel aus oracle.py: die
+    bestmögliche Platzierung *genau dieser 19 Kacheln*. Optional, weil es ein
+    paar Sekunden Rechenzeit kostet.
+    """
+    from board_render import board_to_svg, tile_svg
+
+    running = agent_board is None
+    refresh = '<meta http-equiv="refresh" content="1">' if running else ""
+
+    if running:
+        head = (
+            f'<header><h1>Zug {step + 1} von 19</h1>'
+            f'<span class="meta">Seed {seed} &middot; Gegner: {agent_name}</span></header>'
+            f'<div class="tile-now">'
+            f'<span class="label">Diese Kachel legen:</span>{tile_svg(*tile)}'
+            f'<span class="label">Feldnummer im Terminal eingeben</span></div>'
+        )
+        panels = _panel("Dein Brett", board_to_svg(board, labels=True, highlight=last_cell), score)
+        footer = ('<p class="hint">Freie Felder zeigen ihre Nummer. '
+                  'Das gelb umrandete Feld war dein letzter Zug. '
+                  'Diese Seite aktualisiert sich von selbst.</p>')
+    else:
+        diff = score - agent_score
+        if diff > 0:
+            verdict = f"Du gewinnst mit {diff:.0f} Punkten Vorsprung."
+        elif diff < 0:
+            verdict = f"{agent_name} gewinnt mit {-diff:.0f} Punkten Vorsprung."
+        else:
+            verdict = "Unentschieden."
+        head = (f'<header><h1>Endstand</h1>'
+                f'<span class="meta">Seed {seed} &middot; dieselben 19 Kacheln für alle Bretter</span></header>')
+        panels = (
+            _panel("Dein Brett", board_to_svg(board, highlight=last_cell), score)
+            + _panel(agent_name, board_to_svg(agent_board), agent_score)
+        )
+        hint = f"Dieselbe Partie nochmal: --seed {seed}"
+        if best_board is not None:
+            label = "Bestmöglich" if best_proven else "Bestes gefundenes"
+            panels += _panel(
+                label, board_to_svg(best_board), best_score,
+                note="mit genau diesen 19 Kacheln",
+            )
+            share = (lambda v: f"{v / best_score * 100:.0f} %") if best_score else (lambda v: "-")
+            verdict += (f' Mehr als <strong>{best_score:.0f}</strong> war mit diesen Kacheln '
+                        f'nicht drin – du hast {share(score)} davon geholt, '
+                        f'{agent_name} {share(agent_score)}.')
+            hint = ("Das dritte Brett kennt alle 19 Kacheln von Anfang an – es ist eine obere "
+                    "Schranke, kein erreichbares Ziel. Zum Vergleich: mit freier Kachelwahl "
+                    f"aus dem ganzen Deck wären 307 möglich. &nbsp;&middot;&nbsp; {hint}")
+        footer = f'<div class="verdict">{verdict}</div><p class="hint">{hint}</p>'
+
+    return (f'<!doctype html>\n<html lang="de"><head><meta charset="utf-8">{refresh}'
+            f'<title>Take It Easy - Seed {seed}</title><style>{PAGE_STYLE}</style></head>'
+            f'<body><div class="wrap">{head}<div class="cols">{panels}</div>{footer}</div>'
+            f'</body></html>')
+
+
+def compute_best_board(tiles, time_limit=180):
+    """Bestmögliche Platzierung genau dieser 19 Kacheln, exakt per ILP
+    (oracle.py). Rückgabe (score, board, proven) oder None, wenn pulp fehlt.
+
+    Das ist eine Hindsight-Schranke: sie kennt alle 19 Kacheln von Anfang an,
+    ist also kein Ziel, das eine Online-Policy erreichen könnte - nur die
+    Antwort auf "was wäre mit diesen Kacheln überhaupt drin gewesen?".
+    """
+    try:
+        import pulp  # noqa: F401
+    except ImportError:
+        print("  (übersprungen: pulp ist nicht installiert - `pip install pulp`)")
+        return None
+    from oracle import hill_climb, solve_oracle
+
+    _warm_score, warm_board = hill_climb(list(tiles), random.Random(0))
+    score, board, proven = solve_oracle(list(tiles), warm_board, time_limit)
+    return score, board, proven
+
+
+# ---------------------------------------------------------------------------
 # Spielschleife
 # ---------------------------------------------------------------------------
 
@@ -208,8 +384,16 @@ def main():
                         help="Nur für .zip-Modelle nötig.")
     parser.add_argument("--seed", type=int, default=None,
                         help="Feste Kachelfolge (wiederholbar). Ohne Angabe zufällig.")
+    parser.add_argument("--no-live", action="store_true",
+                        help="Die Live-Ansicht im Browser abschalten (Default: an, "
+                             "schreibt nach jedem Zug replay/play_<seed>.html).")
+    parser.add_argument("--no-best", action="store_true",
+                        help="Am Ende nicht ausrechnen, was mit diesen 19 Kacheln "
+                             "maximal möglich gewesen wäre (kostet ein paar Sekunden "
+                             "und braucht pulp).")
     parser.add_argument("--html", action="store_true",
-                        help="Am Ende beide Bretter als HTML-Vergleich in replay/ schreiben.")
+                        help="Am Ende zusätzlich beide Bretter als Einzelseiten in "
+                             "replay/ schreiben, im Format von replay.py.")
     args = parser.parse_args()
 
     seed = args.seed if args.seed is not None else random.randrange(2**31 - 1)
@@ -222,13 +406,26 @@ def main():
     agent_board, agent_score, agent_moves = play_agent_episode(act, seed)
     print("fertig.\n")
 
+    live_path = None
+    if not args.no_live:
+        REPLAY_DIR.mkdir(exist_ok=True)
+        live_path = REPLAY_DIR / f"play_{seed}.html"
+
     env = TakeItEasyEnv()
     obs, info = env.reset(seed=seed)
     terminated, human_score = False, 0.0
-    step = 0
+    step, last_cell = 0, None
 
     while not terminated:
         running, _complete = score_breakdown(env.board)
+        if live_path is not None:
+            live_path.write_text(play_page(
+                list(env.board), seed, step, env.current_tile, running, last_cell,
+                agent_name=model_name,
+            ))
+            if step == 0:
+                print(f"Live-Ansicht: {live_path.relative_to(REPO_ROOT)}")
+                open_in_browser(live_path)
         print("=" * 75)
         print(f"Zug {step + 1}/19        fertige Linien bisher: {running} Punkte")
         print(render_board(env.board))
@@ -239,7 +436,7 @@ def main():
                   f"{agent_score:.0f} Punkte gemacht.")
             return
         obs, reward, terminated, _truncated, info = env.step(cell)
-        step += 1
+        step, last_cell = step + 1, cell
         if terminated:
             human_score = reward
 
@@ -250,6 +447,13 @@ def main():
     print(f"\nDAS NETZ    ({agent_score:.0f} Punkte)")
     print(render_board(agent_board, show_indices=False))
 
+    best = None
+    if not args.no_best:
+        print("\nRechne aus, was mit diesen 19 Kacheln maximal möglich war ...")
+        # human_board enthaelt genau die 19 gezogenen Kacheln - beide Spieler
+        # hatten dieselben, also reicht ein Brett als Kachelquelle.
+        best = compute_best_board(human_board)
+
     diff = human_score - agent_score
     print("\n" + "=" * 75)
     if diff > 0:
@@ -258,7 +462,31 @@ def main():
         print(f"Das Netz gewinnt mit {-diff:.0f} Punkten Vorsprung.")
     else:
         print("Unentschieden.")
-    print(f"Diese Partie nochmal (auch gegen ein anderes Modell): --seed {seed}")
+
+    if best is not None:
+        best_score, best_board, best_proven = best
+        label = "Maximal möglich" if best_proven else "Bestes gefundenes"
+        print(f"\n{label} mit genau diesen 19 Kacheln: {best_score:.0f} Punkte")
+        print(render_board(best_board, show_indices=False))
+        share = (lambda v: f"{v / best_score * 100:.0f} % davon") if best_score else (lambda v: "-")
+        print(f"\n  du:   {human_score:6.0f}  ({share(human_score)})")
+        print(f"  netz: {agent_score:6.0f}  ({share(agent_score)})")
+        print("\nDieses Brett kennt alle 19 Kacheln von Anfang an - es ist eine obere")
+        print("Schranke, kein erreichbares Ziel. Mit freier Kachelwahl aus dem ganzen")
+        print("Deck wären 307 möglich (siehe oracle.py).")
+
+    print(f"\nDiese Partie nochmal (auch gegen ein anderes Modell): --seed {seed}")
+
+    if live_path is not None:
+        # Ohne meta-refresh, dafür jetzt mit dem Brett des Netzes daneben.
+        live_path.write_text(play_page(
+            human_board, seed, step, None, human_score, last_cell,
+            agent_board=agent_board, agent_score=agent_score, agent_name=model_name,
+            best_board=best[1] if best else None,
+            best_score=best[0] if best else None,
+            best_proven=best[2] if best else True,
+        ))
+        print(f"Endstand als Bild: {live_path.relative_to(REPO_ROOT)}")
 
     if args.html:
         from board_render import board_to_html

@@ -275,7 +275,30 @@ berechnet.
 | `--model` | str | – | `.pt` (Afterstate) oder `.zip` (PPO/DQN). `models/` ist gitignored, muss also lokal noch vorhanden sein |
 | `--algo` | `dqn` \| `ppo` | – | Nur für `.zip`-Modelle nötig |
 | `--seed` | int | zufällig | Feste, wiederholbare Kachelfolge – praktisch, um dieselbe Partie gegen verschiedene Modelle zu spielen |
-| `--html` | flag | aus | Beide Endbretter zusätzlich als HTML in `replay/` |
+| `--no-live` | flag | aus | Live-Ansicht im Browser abschalten |
+| `--no-best` | flag | aus | Am Ende nicht ausrechnen, was mit diesen 19 Kacheln maximal möglich war |
+| `--html` | flag | aus | Zusätzlich beide Endbretter als Einzelseiten in `replay/`, im Format von `replay.py` |
+
+**Live-Ansicht** (standardmäßig an): nach jedem Zug wird
+`replay/play_<seed>.html` neu geschrieben und beim ersten Zug im Browser
+geöffnet – das Brett als echte Kachelgrafik, mit Feldnummern in den freien
+Feldern, dem zuletzt gelegten Feld gelb umrandet und der aktuellen Kachel
+daneben. Die Seite lädt sich per `meta`-Refresh jede Sekunde selbst neu, es
+braucht also keinen Server (läuft über `file://`). Am Ende entfällt der
+Refresh und dein Brett steht neben dem des Netzes. Gespielt wird weiterhin im
+Terminal – dort tippt man die Feldnummern, die Grafik ist zum Draufschauen.
+
+**Am Ende** steht neben deinem Brett und dem des Netzes ein drittes: die
+bestmögliche Platzierung *genau dieser 19 Kacheln*, exakt gerechnet per ILP
+(dasselbe Verfahren wie in [`oracle.py`](oracle.py)). Dazu, wieviel Prozent
+davon du und das Netz geholt habt. Das kostet ein paar Sekunden und braucht
+`pulp`; `--no-best` schaltet es ab.
+
+Zur Einordnung: dieses dritte Brett kennt alle 19 Kacheln von Anfang an, ist
+also eine **obere Schranke und kein erreichbares Ziel** – kein Online-Spieler
+sieht mehr als die aktuelle Kachel. Und es ist nicht das absolute Maximum:
+mit freier Kachelwahl aus dem ganzen 27er-Deck wären 307 möglich, aber diese
+Ziehung gibt eben nur so viel her.
 
 Eingaben während des Spiels: Feldnummer `0`–`18`, `h` für einen Hinweis
 (welches Feld würde das Netz auf *deinem* Brett nehmen?), `d` für die
