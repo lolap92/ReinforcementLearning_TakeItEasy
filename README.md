@@ -255,6 +255,33 @@ Relevante Tags im Dashboard:
 selben Dashboard – einzelne Läufe lassen sich über die Run-Auswahl links
 in TensorBoard vergleichen.
 
+## Gegen das Netz spielen
+
+```bash
+python play.py --model experiments/<run_id>/models/final_model.pt
+python play.py --model experiments/<run_id>/models/final_model.zip --algo ppo
+python play.py --model ... --seed 42 --html
+```
+
+Format wie beim echten Mehrspieler-Take-It-Easy: beide Spieler bekommen
+**dieselbe Kachelfolge** (gleicher Seed), jeder legt auf sein eigenes Brett,
+am Ende werden die Scores verglichen. Kachelglück fällt damit komplett raus –
+verglichen wird nur die Platzierung. Weil das Netz auf seinem eigenen Brett
+spielt und sein Zug nicht von deinem abhängt, wird seine Partie vorab
+berechnet.
+
+| Parameter | Typ | Default | Bedeutung |
+|---|---|---|---|
+| `--model` | str | – | `.pt` (Afterstate) oder `.zip` (PPO/DQN). `models/` ist gitignored, muss also lokal noch vorhanden sein |
+| `--algo` | `dqn` \| `ppo` | – | Nur für `.zip`-Modelle nötig |
+| `--seed` | int | zufällig | Feste, wiederholbare Kachelfolge – praktisch, um dieselbe Partie gegen verschiedene Modelle zu spielen |
+| `--html` | flag | aus | Beide Endbretter zusätzlich als HTML in `replay/` |
+
+Eingaben während des Spiels: Feldnummer `0`–`18`, `h` für einen Hinweis
+(welches Feld würde das Netz auf *deinem* Brett nehmen?), `d` für die
+restlichen Kacheln im Stapel, `q` zum Beenden. Freie Felder zeigen im
+Textbrett ihre Nummer an.
+
 ## Replay
 
 Eine einzelne Episode mit einem gespeicherten Modell nachspielen und das
