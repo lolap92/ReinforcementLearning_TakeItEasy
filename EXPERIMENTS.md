@@ -128,3 +128,4 @@ Ein Lauf pro Zeile. Details (Config, Kennzahlen, Trajektorien) unter `experiment
 | 2026-09-02 | `2026-09-02_1456_afterstate_3m` | afterstate_3m | afterstate_full_board_best_checkpoint | 2000 | 163.57 | 26.68 | 55 | 249 | b43ebc0 |
 | 2026-09-05 | `2026-09-05_0351_phase9_depth1` | phase9_depth1 | search_d1_eg0 | 200 | 162.64 | 27.62 | 93 | 244 | db9d9a5 |
 | 2026-09-05 | `2026-09-05_0351_phase9_endgame4` | phase9_endgame4 | search_d0_eg4 | 200 | 158.88 | 28.99 | 86 | 244 | db9d9a5 |
+| 2026-09-05 | `2026-09-05_0409_phase9_combined` | phase9_combined | search_d1_eg4 | 200 | 163.90 | 27.83 | 93 | 244 | cd22f81 |

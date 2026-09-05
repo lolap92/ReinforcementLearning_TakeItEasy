@@ -197,6 +197,63 @@ Orakel-Zerlegung für PPO/300k/3M: `reports/phase8_scaling_report.html`.
 (Expectimax-Suche zur Spielzeit) bleibt der einzige Hebel mit noch
 nachgewiesenem offenem Potenzial (85–90 Punkte Lücke zum Orakel).
 
+## Phase 9: Expectimax-Suche zur Spielzeit
+
+Umgesetzt in `train_afterstate.py` (`AfterstateAgent(depth=..., endgame_exact=...)`,
+Funktionen `expectimax_value()`/`exact_value()`) und `search.py` als
+Auswertungsskript. Statt sich auf `V(Afterstate)` zu verlassen (Phase 8, ein
+Forward-Pass pro Kandidat), rechnet die Suche den Erwartungswert über mehrere
+Züge direkt aus – möglich, weil die Dynamik vollständig bekannt ist
+(Afterstate deterministisch, nächste Kachel exakt gleichverteilt über das
+Restdeck, keine Duplikate im Deck).
+
+**Ergebnis auf denselben 200 Seeds wie der Hindsight-Orakel-Lauf** (Netz:
+`afterstate_300k/final_model.pt`, das einzige lokal verfügbare `.pt`):
+
+| Konfiguration | Ø | Δ vs. Basis | p (gepaart) | Anteil Orakel |
+|---|---|---|---|---|
+| Basis (depth=0, kein Endspiel = Phase 8) | 158,22 | – | – | 63,6 % |
+| nur exaktes Endspiel (≤4 frei) | 158,88 | +0,66 | 0,82 | 63,9 % |
+| nur 2-Ply-Suche (depth=1) | 162,64 | +4,42 | 0,11 | 65,4 % |
+| **2-Ply + exaktes Endspiel** | **163,90** | **+5,67** | **0,04** | **65,9 %** |
+
+Überraschender Interaktionseffekt: exaktes Endspiel bringt für sich allein
+nichts Messbares (p=0,82), holt aber signifikant zusätzlich +1,26 Punkte
+(p=0,01), sobald die ersten 15 Züge bereits durch 2-Ply besser gespielt
+wurden. Hypothese (nicht verifiziert): die 2-Ply-Suche hält mehr Linien bis
+in die Endphase lebendig, wodurch dort tatsächlich noch echte Entscheidungen
+mit mehreren unterschiedlich guten Optionen anstehen – von der schwächeren
+Basis-Policy aus sind die letzten 4 Züge oft schon festgelegt, exaktes
+Rechnen ändert dann nichts mehr.
+
+**Wichtige Korrektur am Kostenmodell aus Phase 7:** das Deck hat einen Boden
+von 8 nie gezogenen Kacheln (27 Kacheln, 19 Felder), die Zufallsverzweigung
+wird deshalb nie klein. Exakte Suche bis zum Ende ist nur bis ~4 freie
+Felder praktikabel (~24.000 Bewertungen, <1s); bei 5 schon ~1,4 Mio. (~45s),
+bei 6 ~111 Mio. (~1 Stunde) – nicht die "~6 Züge", die Phase 7 vermutet
+hatte. `--depth 2` kostet allein für den ersten Zug einer Partie gemessen
+126 Sekunden, auf CPU nicht praktikabel.
+
+Ein echter Implementierungsfehler wurde dabei gefunden und behoben: die
+erste Version ließ `depth`-Suche und `endgame_exact`-Suche innerhalb einer
+Rekursion ineinanderlaufen, wodurch eine bereits vergrößerte Kandidatenmenge
+(390 Zeilen) zusätzlich in den vollen Endspielmodus fiel und sich weiter bis
+zu einer 111-Millionen-Zeilen-Allokation (15,7 GB) multiplizierte. Behoben,
+indem `AfterstateAgent.act()` einmal pro echtem Zug entscheidet, welcher
+Modus greift, nie gemischt – plus ein Sicherheitsventil, das bei zu großem
+`depth` mit klarer Fehlermeldung abbricht statt den Speicher zu sprengen.
+
+Voller Report mit Diagrammen und Orakel-Zerlegung:
+`reports/phase9_search_report.html`.
+
+**Empfehlung:** `depth=1` + `--endgame-exact 4` als Standard für
+Spielzeit-Entscheidungen (6,5s/Episode statt 0,05s – Faktor 130 für ~3,6 %
+relative Verbesserung). Für `play.py` als Gegner-Option sinnvoll, nicht für
+Trainings-Selbstspiel. Offene nächste Schritte: `--endgame-exact 5` testen
+(~45s zusätzlich, an genau einer Stelle pro Partie), dieselbe Auswertung auf
+dem 3M-Modell wiederholen, und mehr Episoden/Seeds für eine belastbarere
+Signifikanz (n=200 reicht nur knapp für die kombinierte Konfiguration).
+
 ## Nächster Schritt
 
 **Phase 9: Expectimax zur Spielzeit.** Das Orakel (Phase 9-Vorarbeit, oben)

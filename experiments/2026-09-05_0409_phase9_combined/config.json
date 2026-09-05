@@ -1,0 +1,15 @@
+{
+  "run_id": "2026-09-05_0409_phase9_combined",
+  "tag": "phase9_combined",
+  "timestamp": "2026-09-05T04:09:21+00:00",
+  "git_commit": "cd22f81",
+  "env": "TakeItEasyEnv",
+  "algorithm": "Afterstate-Wertfunktion + Expectimax-Suche (Phase 9)",
+  "model_path": "experiments/2026-08-30_0726_afterstate_300k/models/final_model.pt",
+  "depth": 1,
+  "endgame_exact": 4,
+  "episodes": 200,
+  "master_seed": 0,
+  "seconds_total": 1305.6957767009735,
+  "seconds_per_episode": 6.528478883504867
+}
