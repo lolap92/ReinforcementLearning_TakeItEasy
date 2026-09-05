@@ -1,0 +1,15 @@
+{
+  "run_id": "2026-09-05_0351_phase9_endgame4",
+  "tag": "phase9_endgame4",
+  "timestamp": "2026-09-05T03:51:16+00:00",
+  "git_commit": "db9d9a5",
+  "env": "TakeItEasyEnv",
+  "algorithm": "Afterstate-Wertfunktion + Expectimax-Suche (Phase 9)",
+  "model_path": "experiments/2026-08-30_0726_afterstate_300k/models/final_model.pt",
+  "depth": 0,
+  "endgame_exact": 4,
+  "episodes": 200,
+  "master_seed": 0,
+  "seconds_total": 1054.842887878418,
+  "seconds_per_episode": 5.27421443939209
+}
