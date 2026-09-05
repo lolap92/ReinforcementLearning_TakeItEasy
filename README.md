@@ -154,6 +154,45 @@ auf, jeder Einzellauf landet normal unter `experiments/<run_id>/` und in
 Rangliste. Die Gewinner-Konfiguration danach mit deutlich mehr `--timesteps`
 final trainieren.
 
+### Expectimax-Suche zur Spielzeit (Phase 9)
+
+```bash
+python search.py --model experiments/<run_id>/models/final_model.pt
+python search.py --model ... --depth 1 --endgame-exact 4 --episodes 200
+python search.py --model ... --depth 0 --endgame-exact 0   # = Phase 8, zur Kontrolle
+```
+
+Statt sich auf `V(Afterstate)` zu verlassen (Phase 8, ein Forward-Pass pro
+Kandidat), rechnet `search.py` den Erwartungswert über mehrere Züge direkt
+aus – möglich, weil die Dynamik vollständig bekannt ist (Afterstate
+deterministisch, nächste Kachel exakt gleichverteilt über das Restdeck,
+keine Duplikate im Deck). Zwei unabhängig zuschaltbare Mechanismen in
+`train_afterstate.AfterstateAgent`:
+
+| Parameter | Typ | Default | Bedeutung |
+|---|---|---|---|
+| `--depth` | int | `1` | Zusätzliche (Zufall-, Maximum-)Schichten mit dem gelernten Netz als Blattbewertung an der Sohle ("2-Ply" bei 1). `--depth 2` kostet allein für den ersten Zug einer Partie >2 Minuten (gemessen) – auf CPU nicht praktikabel |
+| `--endgame-exact` | int | `4` | Ab wie vielen freien Feldern nach dem Zug exakt bis zum Spielende gesucht wird (`score_board()` statt Netz an den Blättern), unabhängig von `--depth` |
+| `--episodes` | int | `200` | Default = dieselben Seeds wie der Hindsight-Orakel-Lauf, direkt gepaart vergleichbar |
+
+**Kostenmodell** (korrigiert eine zu optimistische Aussage im
+Phase-7-Report): das Deck hat 27 Kacheln, das Board nur 19 Felder – das
+Restdeck hat also einen Boden von 8 Kacheln, der nie unterschritten wird.
+Die Zufallsverzweigung wird deshalb nie klein, anders als bei einem
+Kartenspiel, das sein Deck leerspielt. Exakte Suche bis zum Ende ist deshalb
+nur für die letzten ~4 Züge praktikabel (~24.000 Bewertungen, <1s je
+Entscheidung), nicht für ~6 wie ursprünglich vermutet (bei 5 freien Feldern
+bereits ~1,4 Mio., ~45s; bei 6 ~111 Mio., ~1 Stunde – gemessen auf dieser
+Maschine). `expectimax_value()` und `exact_value()` werden deshalb bewusst
+nie innerhalb derselben Suche gemischt: eine durch `--depth` bereits
+vergrößerte Kandidatenmenge, die zusätzlich in den Endspielmodus fiele,
+würde sich mit dessen Kosten multiplizieren statt mit 1 – ein früher
+Prototyp hat dadurch versehentlich eine 111-Millionen-Zeilen-Allokation
+ausgelöst. `AfterstateAgent.act()` entscheidet stattdessen einmal pro
+echtem Zug, welcher der beiden Modi greift.
+
+Ergebnisse siehe `reports/phase9_search_report.html`.
+
 ### Baselines
 
 ```bash

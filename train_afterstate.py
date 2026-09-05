@@ -448,12 +448,32 @@ class AfterstateAgent:
     vergleichbar sind - und nicht über die schnelle vektorisierte Simulation
     oben, die zwar dasselbe Spiel implementiert, aber ein zweiter Codepfad
     mit eigenem Fehlerpotenzial wäre.
+
+    Phase 9 (siehe Docstring von `expectimax_value`/`exact_value` unten):
+    `depth` und `endgame_exact` schalten optional eine Suche zur Spielzeit
+    dazu, die Fehler von `net` aktiv korrigiert statt sie nur zu
+    approximieren. Beide Defaults sind 0 - das reduziert `act()` exakt auf
+    das bisherige 1-Ply-`argmax(V)` aus Phase 8, unverändertes Verhalten für
+    jeden bestehenden Aufrufer (`play.py`, `evaluate()` mit alten Läufen).
+
+    Die beiden Modi werden je echtem Zug bewusst NICHT gemischt: `act()`
+    entscheidet einmal pro Zug anhand der tatsächlichen Anzahl freier Felder,
+    ob exakt bis zum Ende gesucht wird oder mit `depth` Zusatzschichten und
+    `net` als Blattbewertung. Grund: eine `depth`-Runde vergrößert die
+    Kandidatenmenge (auf bis zu tausende Zeilen), und würde diese vergrößerte
+    Menge anschließend nochmal in eine volle Endspielsuche fallen, multipliziert
+    sich das - schon bei `depth=1` reicht ein ungünstiger Zug, um versehentlich
+    eine Milliarden-Zeilen-Allokation auszulösen (mit einem frühen Prototyp
+    dieser Klasse tatsächlich passiert, siehe Git-History). Exakte Suche
+    startet deshalb immer frisch mit höchstens 19 Kandidaten.
     """
 
-    def __init__(self, net, device, line_features=True):
+    def __init__(self, net, device, line_features=True, depth=0, endgame_exact=0):
         self.net = net
         self.device = device
         self.line_features = line_features
+        self.depth = depth
+        self.endgame_exact = endgame_exact
 
     def act(self, env):
         board = np.array(
@@ -466,12 +486,158 @@ class AfterstateAgent:
         free = np.flatnonzero(board < 0)
         candidates = np.repeat(board[None, :], len(free), axis=0)
         candidates[np.arange(len(free)), free] = TILE_INDEX[env.current_tile]
+        candidate_remaining = np.repeat(remaining[None, :], len(free), axis=0)
+        free_after_placing = len(free) - 1  # Freie Felder je Kandidat, nachdem er gelegt wurde
 
-        feats = encode_afterstates(
-            candidates, np.repeat(remaining[None, :], len(free), axis=0), self.line_features
-        )
-        values = batched_values(self.net, feats, self.device)
+        if self.endgame_exact > 0 and free_after_placing <= self.endgame_exact:
+            values = exact_value(candidates, candidate_remaining)
+        elif self.depth > 0:
+            values = expectimax_value(
+                candidates, candidate_remaining, self.depth,
+                self.net, self.device, self.line_features,
+            )
+        else:
+            feats = encode_afterstates(candidates, candidate_remaining, self.line_features)
+            values = batched_values(self.net, feats, self.device)
         return int(free[int(values.argmax())])
+
+
+# ---------------------------------------------------------------------------
+# Phase 9: Expectimax-Suche zur Spielzeit
+# ---------------------------------------------------------------------------
+#
+# Warum das überhaupt geht, ohne die Umgebung zu kennen: Take It Easy ist ein
+# Einpersonen-MDP mit vollständig bekannter Dynamik. Nach dem Legen ist der
+# Folgezustand deterministisch (Afterstate), und der einzige Zufall - welche
+# Kachel als nächstes gezogen wird - ist eine exakt bekannte Gleichverteilung
+# über das Restdeck (jede der 27 Kacheln ist einzigartig, `build_deck()` hat
+# keine Duplikate; jede noch nicht gezogene Kachel ist also gleich
+# wahrscheinlich). Statt sich auf `V(Afterstate)` zu verlassen (Phase 8,
+# 1-Ply), kann man diesen Erwartungswert direkt ausrechnen und dabei Fehler
+# von `V` teilweise wegkorrigieren - das ist Hebel 3 aus dem
+# Phase-7-Report.
+#
+# Kostenmodell (WICHTIG, korrigiert eine zu optimistische Aussage im
+# Phase-7-Report): das Deck hat 27 Kacheln, das Board nur 19 Felder - es
+# werden also nie mehr als 19 Kacheln gezogen, und das Restdeck hat einen
+# Boden von 27-19=8 Kacheln, der bis zum letzten Zug nie unterschritten wird.
+# Die Zufallsverzweigung wird deshalb NIE klein, anders als z.B. bei einem
+# Kartenspiel, das sein Deck leerspielt. Ein Zug mit `F` freien Feldern und
+# `R` Restdeck-Kacheln braucht für eine EXAKTE Suche bis zum Ende
+#     F * Π_{k=0}^{F-2} (R-k)*(F-1-k)
+# Bewertungen - bei F=4 sind das ~24.000 (in <1s erledigt), bei F=5 schon
+# ~1,4 Mio. (~45s), bei F=6 ~111 Mio. (~1 Stunde) auf dieser Maschine
+# (~32.000 Zeilen/s, gemessen). Volle Suche ist also nur für die letzten
+# ~4 Züge praktikabel, nicht für die letzten ~6, wie der frühere Report
+# vermutet hatte.
+#
+# `depth` erweitert stattdessen die Suche um `depth` zusätzliche
+# (Zufall-, Maximum-)Schichten mit `V` als Blattbewertung an der Sohle -
+# billig (bei `depth=1`, "2-Ply": ≤8.892 Bewertungen selbst beim ersten Zug,
+# ~49.590 über eine ganze Partie), aber approximativ. `endgame_exact` gibt
+# an, ab wie vielen freien Feldern stattdessen exakt bis zum Ende gesucht
+# wird (mit `score_full_boards()` statt `V` an den Blättern) - unabhängig
+# von `depth`, weil das genauer UND (bei ≤4) günstiger ist als eine weitere
+# Netz-approximierte Schicht.
+
+
+def _row_indices(mask, count):
+    """Für eine (M, N)-Bool-Maske mit exakt `count` True je Zeile: die
+    Spaltenindizes der True-Einträge, als (M, count)-Array.
+
+    Nutzt aus, dass `np.argsort` False vor True einsortiert (stabil, in
+    Spaltenreihenfolge) - die ersten `count` Positionen sind damit genau die
+    gesuchten Indizes, ganz ohne Python-Schleife über die Zeilen."""
+    return np.argsort(~mask, axis=1, kind="stable")[:, :count]
+
+
+_MAX_SEARCH_ROWS = 5_000_000  # Sicherheitsventil, siehe beide Funktionen unten
+
+
+def _expand_one_round(boards, remainings, free_count):
+    """Eine (Zufall-, Maximum-)Runde aufspannen: für jede der `n` Zeilen alle
+    `R` möglichen nächsten Kacheln, für jede davon alle `free_count` freien
+    Felder. Gemeinsam von `expectimax_value` und `exact_value` genutzt -
+    beide unterscheiden sich nur darin, was am Ende der Rekursion an den
+    Blättern steht (Netz vs. exakter Score), nicht darin, wie eine Runde
+    aufgespannt wird."""
+    n = boards.shape[0]
+    remaining_size = int(remainings[0].sum())  # synchron über alle Zeilen, siehe Docstrings unten
+    tiles = _row_indices(remainings, remaining_size)              # (n, R)
+
+    chance_boards = np.repeat(boards, remaining_size, axis=0)     # (n*R, 19)
+    chance_remaining = np.repeat(remainings, remaining_size, axis=0).copy()
+    drawn = tiles.reshape(-1)                                     # (n*R,)
+    chance_remaining[np.arange(n * remaining_size), drawn] = False
+
+    free_cells = _row_indices(chance_boards < 0, free_count)      # (n*R, F)
+    next_n = n * remaining_size * free_count
+    if next_n > _MAX_SEARCH_ROWS:
+        raise ValueError(
+            f"Suchbaum würde auf {next_n:,} Zeilen anwachsen (Limit "
+            f"{_MAX_SEARCH_ROWS:,}) - depth zu groß für diese Kandidatenmenge. "
+            "Siehe Kostenmodell im Docstring von expectimax_value/exact_value."
+        )
+    max_boards = np.repeat(chance_boards, free_count, axis=0)     # (n*R*F, 19)
+    max_remaining = np.repeat(chance_remaining, free_count, axis=0)
+    cells = free_cells.reshape(-1)                                # (n*R*F,)
+    tile_for_row = np.repeat(drawn, free_count)                   # (n*R*F,)
+    max_boards[np.arange(max_boards.shape[0]), cells] = tile_for_row
+    return max_boards, max_remaining, n, remaining_size, free_count
+
+
+def expectimax_value(boards, remainings, depth, net, device, line_features):
+    """Wert jeder Zeile in `boards` (bereits gelegte Afterstates, (N,19)) mit
+    zugehörigem Restdeck `remainings` ((N,27) bool) - `depth` zusätzliche
+    (Zufall-, Maximum-)Schichten mit `net` als Blattbewertung an der Sohle.
+
+    Kernannahme, die die ganze Vektorisierung trägt: die Anzahl freier
+    Felder ist über eine komplette Rekursionsrunde hinweg synchron - jeder
+    Zug verringert sie um exakt 1, egal welche Kachel/welches Feld gewählt
+    wird. Ebenso bleibt die GRÖSSE des Restdecks je Runde synchron (nur die
+    Identität der Kacheln unterscheidet sich zwischen Zweigen). Damit lässt
+    sich jede Ebene des Suchbaums als flaches Array behandeln und per
+    `reshape` + `max`/`mean` zusammenfalten - keine Baum-Buchhaltung nötig.
+
+    Bewusst OHNE Endspiel-Umschaltung auf `exact_value`: eine Kandidatenmenge,
+    die durch `depth`-Runden schon auf tausende Zeilen angewachsen ist, würde
+    bei einer zusätzlichen vollen Endspielsuche mit diesem n multipliziert
+    statt mit 1 - siehe `AfterstateAgent.act()`, das exakte Suche deshalb
+    immer separat und nur mit frischen, kleinen Kandidatenmengen aufruft.
+    Läuft depth hier trotzdem zu groß, bricht `_expand_one_round` mit einer
+    klaren Fehlermeldung ab statt den Speicher zu sprengen.
+    """
+    free_count = int((boards[0] < 0).sum())  # synchron über alle Zeilen, siehe oben
+
+    if free_count == 0:
+        return score_full_boards(boards).astype(np.float64)
+    if depth <= 0:
+        feats = encode_afterstates(boards, remainings, line_features)
+        return batched_values(net, feats, device).astype(np.float64)
+
+    max_boards, max_remaining, n, remaining_size, free_count = _expand_one_round(
+        boards, remainings, free_count
+    )
+    child_values = expectimax_value(max_boards, max_remaining, depth - 1, net, device, line_features)
+    best_per_chance = child_values.reshape(n * remaining_size, free_count).max(axis=1)
+    return best_per_chance.reshape(n, remaining_size).mean(axis=1)
+
+
+def exact_value(boards, remainings):
+    """Wie `expectimax_value`, aber ohne Netz: rekursiert bis zum vollen
+    Brett und wertet dort exakt mit `score_full_boards()` aus. Nur für kleine
+    Kandidatenmengen gedacht (siehe `AfterstateAgent.act()` und das
+    Kostenmodell im Modul-Docstring oben - ab ~5 freien Feldern wird das
+    schnell zu teuer für Spielzeit-Suche)."""
+    free_count = int((boards[0] < 0).sum())
+    if free_count == 0:
+        return score_full_boards(boards).astype(np.float64)
+    max_boards, max_remaining, n, remaining_size, free_count = _expand_one_round(
+        boards, remainings, free_count
+    )
+    child_values = exact_value(max_boards, max_remaining)
+    best_per_chance = child_values.reshape(n * remaining_size, free_count).max(axis=1)
+    return best_per_chance.reshape(n, remaining_size).mean(axis=1)
 
 
 def evaluate(agent, n_episodes, seed):
