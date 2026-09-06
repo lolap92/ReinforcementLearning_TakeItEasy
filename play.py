@@ -14,10 +14,29 @@ Nutzung
 -------
     python play.py --model experiments/<run_id>/models/final_model.pt
     python play.py --model experiments/<run_id>/models/final_model.zip --algo ppo
+    python play.py --heuristic greedy_potential   # kein Modell nötig, siehe README
+    python play.py --model ... --depth 1 --endgame-exact 4   # Phase-9-Suche dazuschalten
     python play.py --model ... --seed 42          # feste Partie, wiederholbar
     python play.py --model ... --no-live          # ohne Browser-Ansicht
     python play.py --model ... --no-best          # ohne Maximum-Berechnung am Ende
     python play.py --model ... --html             # zusätzlich Einzelbretter wie replay.py
+
+Drei Spielstärken, ohne selbst zu trainieren, siehe README-Abschnitt
+"Gegen das Netz spielen": `--heuristic greedy_potential` (leicht, kein
+Modell nötig), `--model play_models/afterstate_300k.pt` (mittel), dasselbe
+Modell mit `--depth 1 --endgame-exact 4` (stark, Phase-9-Suche).
+
+Multiplayer-Modus (--multiplayer)
+----------------------------------
+Für echtes Spiel mit mehreren Menschen am Tisch, jede·r auf dem eigenen
+physischen Brett: `--multiplayer` schaltet das digitale Brett komplett ab.
+Statt Feldnummern einzutippen, zieht das Programm die 19 Kacheln des Seeds
+nacheinander und zeigt jede einzeln groß als Bild - Enter im Terminal zeigt
+die nächste. Die KI spielt parallel im Hintergrund mit (wie im normalen
+Modus vorab berechnet). Am Ende: nur der KI-Score und das mit genau diesen
+19 Kacheln maximal Mögliche (siehe compute_best_board) - kein digitaler
+Vergleich zu den menschlichen Brettern, die bleiben real und werden von Hand
+verglichen.
 
 Live-Ansicht
 ------------
@@ -76,22 +95,45 @@ CELL_WIDTH = 15
 # Modelle
 # ---------------------------------------------------------------------------
 
-def load_agent(model_path, algo=None):
+HEURISTIC_NAMES = {
+    "random": "Zufall",
+    "greedy": "Greedy (score_board - siehe Phase 7, kaum besser als Zufall)",
+    "greedy_potential": "Greedy (Potential)",
+    "expected_value": "Erwartungswert-Heuristik",
+}
+
+
+def load_agent(model_path, algo=None, heuristic=None, depth=0, endgame_exact=0, seed=0):
     """Gibt eine Funktion act(env, obs, info) -> Feldindex zurück.
 
-    Die beiden Modellarten brauchen unterschiedliche Eingaben (das
-    Afterstate-Netz bewertet Folgezustände und liest dafür direkt Board,
-    Restdeck und aktuelle Kachel aus der Env; SB3 arbeitet auf der
-    Observation), deshalb hier eine gemeinsame Hülle.
+    Drei Quellen für einen Gegner, austauschbar über dieselbe Hülle:
+      - `heuristic`: einer der Namen aus `baselines.AGENTS` - kein Modell
+        nötig, läuft überall ohne torch/sb3. Die Heuristik-Funktionen nehmen
+        einen eigenen RNG für Gleichstand-Entscheidungen; der wird hier aus
+        `seed` abgeleitet, damit --seed weiterhin die komplette Partie
+        reproduzierbar macht (nicht nur die Kachelfolge).
+      - `.pt`: Afterstate-Wertfunktion (train_afterstate.py). `depth`/
+        `endgame_exact` schalten optional die Phase-9-Suche dazu (siehe
+        train_afterstate.expectimax_value/exact_value) - teurer, aber
+        stärker, siehe reports/phase9_search_report.html.
+      - `.zip`: MaskablePPO/DQN (train_ppo.py/train_dqn.py), braucht `algo`.
+
     Die schweren Importe passieren absichtlich erst hier drin - sonst
     bräuchte ein PPO-Replay torch-für-Afterstate und umgekehrt.
     """
+    if heuristic is not None:
+        import baselines
+        rng = np.random.default_rng(seed)
+        agent_fn = baselines.AGENTS[heuristic]
+        return (lambda env, obs, info: int(agent_fn(env, info, rng))), HEURISTIC_NAMES[heuristic]
+
     path = Path(model_path)
     if not path.exists():
         raise SystemExit(
             f"Modell nicht gefunden: {path}\n"
             "models/ ist gitignored - das Modell muss lokal aus dem "
-            "Trainingslauf noch vorhanden sein."
+            "Trainingslauf noch vorhanden sein (oder --heuristic nutzen, "
+            "das braucht keine Modelldatei)."
         )
 
     if path.suffix == ".pt":
@@ -106,8 +148,14 @@ def load_agent(model_path, algo=None):
             atoms=checkpoint["atoms"],
         )
         net.load_state_dict(checkpoint["state_dict"])
-        agent = AfterstateAgent(net, torch.device("cpu"), checkpoint["line_features"])
-        return lambda env, obs, info: agent.act(env), "Afterstate-Wertfunktion"
+        agent = AfterstateAgent(
+            net, torch.device("cpu"), checkpoint["line_features"],
+            depth=depth, endgame_exact=endgame_exact,
+        )
+        name = "Afterstate-Wertfunktion"
+        if depth > 0 or endgame_exact > 0:
+            name += f" + Suche (depth={depth}, endgame_exact={endgame_exact})"
+        return lambda env, obs, info: agent.act(env), name
 
     if algo is None:
         raise SystemExit("Für .zip-Modelle wird --algo dqn|ppo gebraucht.")
@@ -235,6 +283,9 @@ PAGE_STYLE = """
   .tile-now { display:flex; align-items:center; gap:14px; background:#142b23;
               border:1px solid #23453a; border-radius:12px; padding:12px 18px; }
   .tile-now .label { font-size:13px; color:#8fa79c; }
+  .tile-big { display:flex; justify-content:center; align-items:center; background:#142b23;
+              border:1px solid #23453a; border-radius:16px; padding:32px; }
+  .tile-big svg { width:min(85vw, 560px); height:auto; }
   svg { max-width:100%; height:auto; display:block; }
   .panel svg { width:100%; }
   .verdict { font-size:17px; font-weight:600; line-height:1.55; text-align:center; padding:16px 20px;
@@ -335,6 +386,110 @@ def compute_best_board(tiles, time_limit=180):
 
 
 # ---------------------------------------------------------------------------
+# Multiplayer-Modus: nur die Kachel zeigen, kein digitales Brett
+# ---------------------------------------------------------------------------
+#
+# Für echtes Spiel mit mehreren Leuten am Tisch, jeder auf seinem eigenen
+# physischen Brett: das Programm übernimmt nur die Rolle des Kartengebers
+# (zieht Kacheln in einer festen, per Seed reproduzierbaren Reihenfolge und
+# zeigt jede groß als Bild) und lässt parallel eine KI im Hintergrund
+# mitspielen. Kein Feld-Eintippen, kein digitales Brett für Menschen - am
+# Ende nur der KI-Score und das mit genau diesen 19 Kacheln maximal
+# Mögliche (siehe compute_best_board oben), zum Vergleich für alle
+# menschlichen Spieler an ihren eigenen Brettern.
+
+def multiplayer_tile_page(seed, step, tile, agent_name):
+    from board_render import tile_svg
+    return (
+        f'<!doctype html>\n<html lang="de"><head><meta charset="utf-8">'
+        f'<meta http-equiv="refresh" content="1">'
+        f'<title>Take It Easy - Kachel {step + 1}</title><style>{PAGE_STYLE}</style></head>'
+        f'<body><div class="wrap">'
+        f'<header><h1>Kachel {step + 1} von 19</h1>'
+        f'<span class="meta">Seed {seed} &middot; KI spielt mit: {agent_name}</span></header>'
+        f'<div class="tile-big">{tile_svg(*tile)}</div>'
+        f'<p class="hint">Jede·r legt diese Kachel auf ihr/sein eigenes physisches Brett. '
+        f'Diese Seite aktualisiert sich von selbst, sobald der Kartengeber im Terminal '
+        f'Enter drückt.</p>'
+        f'</div></body></html>'
+    )
+
+
+def multiplayer_end_page(seed, agent_board, agent_score, agent_name, best):
+    from board_render import board_to_svg
+    panels = _panel(agent_name, board_to_svg(agent_board), agent_score)
+    footer_extra = ""
+    if best is not None:
+        best_score, best_board, best_proven = best
+        label = "Maximal möglich" if best_proven else "Bestes gefundenes"
+        panels += _panel(label, board_to_svg(best_board), best_score, note="mit genau diesen 19 Kacheln")
+        pct = agent_score / best_score * 100 if best_score else 0.0
+        footer_extra = (
+            f' Die KI hat <strong>{pct:.0f}&nbsp;%</strong> des mit diesen Kacheln '
+            f'Möglichen erreicht.'
+        )
+    verdict = f"{agent_name}: {agent_score:.0f} Punkte.{footer_extra}"
+    hint = (
+        "Vergleicht eure eigenen, physischen Bretter gegen diese beiden Zahlen. "
+        f"Diese Partie nochmal: --seed {seed}"
+    )
+    return (
+        f'<!doctype html>\n<html lang="de"><head><meta charset="utf-8">'
+        f'<title>Take It Easy - Endstand</title><style>{PAGE_STYLE}</style></head>'
+        f'<body><div class="wrap">'
+        f'<header><h1>Endstand</h1>'
+        f'<span class="meta">Seed {seed} &middot; alle 19 Kacheln gezogen</span></header>'
+        f'<div class="cols">{panels}</div>'
+        f'<div class="verdict">{verdict}</div><p class="hint">{hint}</p>'
+        f'</div></body></html>'
+    )
+
+
+def run_multiplayer(seed, act, model_name, live_path, skip_best):
+    """Zieht die 19 Kacheln des Seeds nacheinander, zeigt jede groß an und
+    lässt die KI im Hintergrund mitspielen (play_agent_episode - exakt
+    dieselbe Mechanik wie im normalen Modus, nur dass hier niemand ein
+    digitales Brett führt)."""
+    agent_board, agent_score, agent_moves = play_agent_episode(act, seed)
+
+    for step, (tile, _cell) in enumerate(agent_moves):
+        if live_path is not None:
+            live_path.write_text(multiplayer_tile_page(seed, step, tile, model_name))
+            if step == 0:
+                print(f"Anzeige: {live_path.relative_to(REPO_ROOT)}")
+                open_in_browser(live_path)
+        print(f"Kachel {step + 1}/19: {tile}  (auf euren physischen Brettern legen)")
+        try:
+            raw = input("  Enter für die nächste Kachel (q zum Abbrechen) > ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print(); raw = "q"
+        if raw in ("q", "quit", "exit"):
+            print(f"\nAbgebrochen nach Kachel {step + 1}/19. Die KI spielt ihre Partie "
+                  f"unabhängig von der Anzeige komplett durch: {agent_score:.0f} Punkte "
+                  "über alle 19 Kacheln dieses Seeds.")
+            return
+
+    best = None if skip_best else compute_best_board(agent_board)
+
+    print("=" * 75)
+    print(f"KI ({model_name}): {agent_score:.0f} Punkte")
+    print(render_board(agent_board, show_indices=False))
+    if best is not None:
+        best_score, best_board, best_proven = best
+        label = "Maximal möglich" if best_proven else "Bestes gefundenes"
+        print(f"\n{label} mit genau diesen 19 Kacheln: {best_score:.0f} Punkte")
+        print(render_board(best_board, show_indices=False))
+        pct = agent_score / best_score * 100 if best_score else 0.0
+        print(f"\nDie KI hat {pct:.0f} % des Möglichen erreicht.")
+    print(f"\nVergleicht eure eigenen Bretter gegen diese Zahlen. "
+          f"Diese Partie nochmal: --seed {seed}")
+
+    if live_path is not None:
+        live_path.write_text(multiplayer_end_page(seed, agent_board, agent_score, model_name, best))
+        print(f"Endstand als Bild: {live_path.relative_to(REPO_ROOT)}")
+
+
+# ---------------------------------------------------------------------------
 # Spielschleife
 # ---------------------------------------------------------------------------
 
@@ -378,12 +533,26 @@ def main():
     parser = argparse.ArgumentParser(
         description="Gegen ein trainiertes Netz spielen - gleiche Kachelfolge, eigenes Brett."
     )
-    parser.add_argument("--model", required=True,
-                        help="Pfad zum Modell: .pt (Afterstate) oder .zip (PPO/DQN).")
+    parser.add_argument("--model", default=None,
+                        help="Pfad zum Modell: .pt (Afterstate) oder .zip (PPO/DQN). "
+                             "Nicht nötig zusammen mit --heuristic.")
     parser.add_argument("--algo", choices=["dqn", "ppo"], default=None,
                         help="Nur für .zip-Modelle nötig.")
+    parser.add_argument("--heuristic", choices=list(HEURISTIC_NAMES), default=None,
+                        help="Gegner ohne Modelldatei: eine Heuristik aus baselines.py "
+                             "(z.B. greedy_potential als leichter Gegner). Schließt --model aus.")
+    parser.add_argument("--depth", type=int, default=0,
+                        help="Nur für .pt-Modelle: zusätzliche Suchtiefe (Phase 9, "
+                             "siehe reports/phase9_search_report.html). Default 0 = aus.")
+    parser.add_argument("--endgame-exact", type=int, default=0,
+                        help="Nur für .pt-Modelle: ab wie vielen freien Feldern exakt bis "
+                             "zum Ende gesucht wird (Phase 9). Default 0 = aus.")
     parser.add_argument("--seed", type=int, default=None,
                         help="Feste Kachelfolge (wiederholbar). Ohne Angabe zufällig.")
+    parser.add_argument("--multiplayer", action="store_true",
+                        help="Kein digitales Brett: zeigt jede Kachel nur groß als Bild, "
+                             "für mehrere Menschen an ihren eigenen physischen Brettern. "
+                             "Am Ende nur KI-Score und Maximum, siehe Docstring oben.")
     parser.add_argument("--no-live", action="store_true",
                         help="Die Live-Ansicht im Browser abschalten (Default: an, "
                              "schreibt nach jedem Zug replay/play_<seed>.html).")
@@ -396,10 +565,32 @@ def main():
                              "replay/ schreiben, im Format von replay.py.")
     args = parser.parse_args()
 
-    seed = args.seed if args.seed is not None else random.randrange(2**31 - 1)
-    act, model_name = load_agent(args.model, args.algo)
+    if args.heuristic is None and args.model is None:
+        raise SystemExit("Entweder --model oder --heuristic angeben.")
+    if args.heuristic is not None and args.model is not None:
+        raise SystemExit("--model und --heuristic schließen sich aus.")
+    if (args.depth or args.endgame_exact) and args.heuristic is not None:
+        raise SystemExit("--depth/--endgame-exact brauchen ein .pt-Modell, keine Heuristik.")
 
-    print(f"\nGegner: {model_name}  ({Path(args.model).name})")
+    seed = args.seed if args.seed is not None else random.randrange(2**31 - 1)
+    act, model_name = load_agent(
+        args.model, args.algo, heuristic=args.heuristic,
+        depth=args.depth, endgame_exact=args.endgame_exact, seed=seed,
+    )
+
+    if args.multiplayer:
+        print(f"\nGegner: {model_name}"
+              f"{f'  ({Path(args.model).name})' if args.model else ''}")
+        print(f"Seed:   {seed}   (mit --seed {seed} exakt diese Partie nochmal spielen)\n")
+        live_path = None
+        if not args.no_live:
+            REPLAY_DIR.mkdir(exist_ok=True)
+            live_path = REPLAY_DIR / f"play_{seed}_multiplayer.html"
+        run_multiplayer(seed, act, model_name, live_path, args.no_best)
+        return
+
+    print(f"\nGegner: {model_name}"
+          f"{f'  ({Path(args.model).name})' if args.model else ''}")
     print(f"Seed:   {seed}   (mit --seed {seed} exakt diese Partie nochmal spielen)")
     print("\nBeide bekommen dieselben 19 Kacheln in derselben Reihenfolge,")
     print("jeder legt auf sein eigenes Brett. Das Netz spielt vor ...", end=" ", flush=True)

@@ -300,6 +300,8 @@ in TensorBoard vergleichen.
 ```bash
 python play.py --model experiments/<run_id>/models/final_model.pt
 python play.py --model experiments/<run_id>/models/final_model.zip --algo ppo
+python play.py --heuristic greedy_potential      # kein Modell nötig
+python play.py --model ... --depth 1 --endgame-exact 4   # Phase-9-Suche dazu
 python play.py --model ... --seed 42 --html
 ```
 
@@ -312,12 +314,44 @@ berechnet.
 
 | Parameter | Typ | Default | Bedeutung |
 |---|---|---|---|
-| `--model` | str | – | `.pt` (Afterstate) oder `.zip` (PPO/DQN). `models/` ist gitignored, muss also lokal noch vorhanden sein |
+| `--model` | str | – | `.pt` (Afterstate) oder `.zip` (PPO/DQN). Schließt `--heuristic` aus |
 | `--algo` | `dqn` \| `ppo` | – | Nur für `.zip`-Modelle nötig |
+| `--heuristic` | `random`\|`greedy`\|`greedy_potential`\|`expected_value` | – | Gegner ohne Modelldatei, direkt aus `baselines.py`. Schließt `--model` aus |
+| `--depth` | int | `0` | Nur für `.pt`-Modelle: zusätzliche Suchtiefe (Phase 9) |
+| `--endgame-exact` | int | `0` | Nur für `.pt`-Modelle: ab wie vielen freien Feldern exakt bis zum Ende gesucht wird (Phase 9) |
 | `--seed` | int | zufällig | Feste, wiederholbare Kachelfolge – praktisch, um dieselbe Partie gegen verschiedene Modelle zu spielen |
+| `--multiplayer` | flag | aus | Kein digitales Brett – zeigt nur die Kacheln als Bild, für mehrere Menschen an eigenen physischen Brettern. Siehe eigener Abschnitt unten |
 | `--no-live` | flag | aus | Live-Ansicht im Browser abschalten |
 | `--no-best` | flag | aus | Am Ende nicht ausrechnen, was mit diesen 19 Kacheln maximal möglich war |
 | `--html` | flag | aus | Zusätzlich beide Endbretter als Einzelseiten in `replay/`, im Format von `replay.py` |
+
+### Drei Spielstärken
+
+`models/` ist gitignored (zu viele, zu groß über alle Experimente hinweg),
+aber drei kuratierte Gegner in unterschiedlicher Stärke stehen bereit – einer
+davon als Datei in [`play_models/`](play_models/) (bewusst *nicht*
+gitignored, ~2,9 MB, siehe `.gitignore`), die anderen beiden brauchen
+entweder gar keine oder dieselbe Datei mit anderen Flags:
+
+| Stufe | Befehl | Ø Score* |
+|---|---|---|
+| Leicht | `python play.py --heuristic greedy_potential` | 120,9 |
+| Mittel | `python play.py --model play_models/afterstate_300k.pt` | 160,4 |
+| Stark | `python play.py --model play_models/afterstate_300k.pt --depth 1 --endgame-exact 4` | 163,9 |
+
+\* Gemessener Durchschnitt über 200–2000 Episoden, siehe
+[`reports/phase7_analysis_report.html`](reports/phase7_analysis_report.html)
+(Heuristik, Leicht) und
+[`reports/phase9_search_report.html`](reports/phase9_search_report.html)
+(Mittel/Stark) – keine Schätzung. Zur Einordnung: die Spielanleitung nennt
+150 Punkte als „gutes Ergebnis“ für einen Menschen – „Mittel“ liegt bereits
+darüber, „Leicht“ knapp darunter, ist also kein Anfänger-Pushover.
+
+Eigenes stärkeres Modell? Trainiere mit `train_afterstate.py` (siehe oben)
+und kopiere die `.pt`-Datei nach `play_models/` – oder committe sie einfach
+so: bei ~3 MB pro Checkpoint ist normales Git ohne Git-LFS völlig
+ausreichend, das Bündeln in `play_models/` statt direkt in `experiments/`
+lässt die generelle `.gitignore`-Regel für Trainings-Rohdaten unangetastet.
 
 **Live-Ansicht** (standardmäßig an): nach jedem Zug wird
 `replay/play_<seed>.html` neu geschrieben und beim ersten Zug im Browser
@@ -344,6 +378,48 @@ Eingaben während des Spiels: Feldnummer `0`–`18`, `h` für einen Hinweis
 (welches Feld würde das Netz auf *deinem* Brett nehmen?), `d` für die
 restlichen Kacheln im Stapel, `q` zum Beenden. Freie Felder zeigen im
 Textbrett ihre Nummer an.
+
+### Multiplayer-Modus (`--multiplayer`)
+
+```bash
+python play.py --model play_models/afterstate_300k.pt --multiplayer
+```
+
+Für echtes Spiel mit mehreren Menschen an einem Tisch, jede·r auf dem
+eigenen physischen Brett: `--multiplayer` schaltet das digitale Brett
+komplett ab. Statt Feldnummern einzutippen, zieht das Programm die 19
+Kacheln des Seeds nacheinander und zeigt **nur die Kachel selbst, groß als
+Bild** – Enter im Terminal (der Kartengeber bedient die Tastatur) zeigt die
+nächste. Die KI spielt parallel im Hintergrund mit, ihr eigenes Brett bleibt
+bis zum Ende verdeckt.
+
+Am Ende: nur zwei Zahlen, kein digitaler Vergleich zu den physischen
+Brettern (die bleiben real, jede·r zählt selbst nach) – der **KI-Score** und
+das mit **genau diesen 19 Kacheln maximal Mögliche** (exakt per ILP, siehe
+`oracle.py`), damit alle am Tisch wissen, woran sie sich messen.
+
+**Auf einem Handy/Tablet als geteilte Anzeige nutzen:** `play.py` selbst
+braucht Python + die Abhängigkeiten aus `requirements.txt` (insbesondere
+`torch`) – auf Android ist das über Termux zwar theoretisch machbar, aber
+PyTorch hat dort keine offiziellen Wheels und lässt sich oft nur mühsam oder
+gar nicht installieren. Der deutlich robustere Weg: `play.py` läuft ganz
+normal auf einem PC/Laptop im selben WLAN, das Handy zeigt nur die bereits
+generierte Seite im Browser an – genau dafür lädt sich
+`replay/play_<seed>_multiplayer.html` per `meta`-Refresh jede Sekunde selbst
+neu, sodass sie sich automatisch aktualisiert, sobald der Kartengeber am PC
+Enter drückt.
+
+```bash
+# Auf dem PC, in einem zweiten Terminal, während play.py läuft:
+cd replay
+python -m http.server 8000
+# Lokale IP herausfinden: `ip addr` (Linux/Mac) bzw. `ipconfig` (Windows)
+```
+
+Auf dem Handy im selben WLAN im Browser
+`http://<PC-IP>:8000/play_<seed>_multiplayer.html` öffnen (Seed erscheint zu
+Beginn im Terminal). Firewall auf dem PC muss eingehende Verbindungen auf
+Port 8000 zulassen.
 
 ## Replay
 
