@@ -129,3 +129,11 @@ Ein Lauf pro Zeile. Details (Config, Kennzahlen, Trajektorien) unter `experiment
 | 2026-09-05 | `2026-09-05_0351_phase9_depth1` | phase9_depth1 | search_d1_eg0 | 200 | 162.64 | 27.62 | 93 | 244 | db9d9a5 |
 | 2026-09-05 | `2026-09-05_0351_phase9_endgame4` | phase9_endgame4 | search_d0_eg4 | 200 | 158.88 | 28.99 | 86 | 244 | db9d9a5 |
 | 2026-09-05 | `2026-09-05_0409_phase9_combined` | phase9_combined | search_d1_eg4 | 200 | 163.90 | 27.83 | 93 | 244 | cd22f81 |
+| 2026-09-06 | `2026-09-06_0409_capacity_probe_16x16` | capacity_probe_16x16 | afterstate_full_board | 300 | 120.98 | 21.86 | 56 | 190 | 9abd823 |
+| 2026-09-06 | `2026-09-06_0409_capacity_probe_16x16` | capacity_probe_16x16 | afterstate_full_board_best_checkpoint | 300 | 120.55 | 22.06 | 56 | 190 | 9abd823 |
+| 2026-09-06 | `2026-09-06_0409_capacity_probe_32x32` | capacity_probe_32x32 | afterstate_full_board | 300 | 144.12 | 23.30 | 62 | 210 | 9abd823 |
+| 2026-09-06 | `2026-09-06_0409_capacity_probe_32x32` | capacity_probe_32x32 | afterstate_full_board_best_checkpoint | 300 | 144.12 | 23.30 | 62 | 210 | 9abd823 |
+| 2026-09-06 | `2026-09-06_0457_capacity_80_final` | capacity_80_final | afterstate_full_board | 2000 | 96.28 | 25.95 | 0 | 188 | 9abd823 |
+| 2026-09-06 | `2026-09-06_0457_capacity_80_final` | capacity_80_final | afterstate_full_board_best_checkpoint | 2000 | 96.28 | 25.95 | 0 | 188 | 9abd823 |
+| 2026-09-06 | `2026-09-06_0522_capacity_80_v4` | capacity_80_v4 | afterstate_full_board | 2000 | 106.97 | 26.58 | 0 | 211 | 9abd823 |
+| 2026-09-06 | `2026-09-06_0522_capacity_80_v4` | capacity_80_v4 | afterstate_full_board_best_checkpoint | 2000 | 106.97 | 26.58 | 0 | 211 | 9abd823 |

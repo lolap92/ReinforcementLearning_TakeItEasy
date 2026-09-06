@@ -1,0 +1,31 @@
+{
+  "run_id": "2026-09-06_0409_capacity_probe_16x16",
+  "tag": "capacity_probe_16x16",
+  "timestamp": "2026-09-06T04:09:56+00:00",
+  "git_commit": "9abd823",
+  "env": "TakeItEasyEnv",
+  "algorithm": "Afterstate-Wertfunktion (lambda-Return, Selbstspiel)",
+  "hyperparameters": {
+    "episodes": 19968,
+    "iterations": 78,
+    "games_per_iter": 256,
+    "epochs": 4,
+    "batch_size": 512,
+    "learning_rate": "cosine(0.001 -> 0)",
+    "lambda": 0.7,
+    "gamma": 1.0,
+    "epsilon": "linear(0.2 -> 0.01)",
+    "hidden": [
+      16,
+      16
+    ],
+    "value_head": "twohot",
+    "atoms": 51,
+    "line_features": true,
+    "feature_dim": 348,
+    "parameters": 6787
+  },
+  "eval_episodes": 300,
+  "master_seed": 0,
+  "device": "cpu"
+}

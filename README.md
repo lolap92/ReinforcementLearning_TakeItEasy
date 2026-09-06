@@ -327,31 +327,58 @@ berechnet.
 
 ### Drei Spielstärken
 
-`models/` ist gitignored (zu viele, zu groß über alle Experimente hinweg),
-aber drei kuratierte Gegner in unterschiedlicher Stärke stehen bereit – einer
-davon als Datei in [`play_models/`](play_models/) (bewusst *nicht*
-gitignored, ~2,9 MB, siehe `.gitignore`), die anderen beiden brauchen
-entweder gar keine oder dieselbe Datei mit anderen Flags:
+Drei eigens dafür trainierte Netze in [`play_models/`](play_models/)
+(bewusst *nicht* gitignored, siehe `.gitignore` – zusammen unter 3 MB, Git
+ohne LFS reicht locker):
 
-| Stufe | Befehl | Ø Score* |
-|---|---|---|
-| Leicht | `python play.py --heuristic greedy_potential` | 120,9 |
-| Mittel | `python play.py --model play_models/afterstate_300k.pt` | 160,4 |
-| Stark | `python play.py --model play_models/afterstate_300k.pt --depth 1 --endgame-exact 4` | 163,9 |
+| Stufe | Netz | Befehl | Ø Score | Std |
+|---|---|---|---|---|
+| Leicht | `afterstate_96_tiny.pt` (8×8, 4.352 Episoden) | `python play.py --model play_models/afterstate_96_tiny.pt` | 96,3 | 26,0 |
+| Mittel | `afterstate_120_small.pt` (16×16, 20.000 Episoden) | `python play.py --model play_models/afterstate_120_small.pt` | 121,0 | 21,9 |
+| Stark | `afterstate_300k.pt` (512×512×512, 300.000 Episoden) | `python play.py --model play_models/afterstate_300k.pt` | 160,4 | 27,3 |
 
-\* Gemessener Durchschnitt über 200–2000 Episoden, siehe
-[`reports/phase7_analysis_report.html`](reports/phase7_analysis_report.html)
-(Heuristik, Leicht) und
-[`reports/phase9_search_report.html`](reports/phase9_search_report.html)
-(Mittel/Stark) – keine Schätzung. Zur Einordnung: die Spielanleitung nennt
-150 Punkte als „gutes Ergebnis“ für einen Menschen – „Mittel“ liegt bereits
-darüber, „Leicht“ knapp darunter, ist also kein Anfänger-Pushover.
+Alle drei sind dieselbe Architektur (`train_afterstate.py`, Phase 8) nur mit
+unterschiedlich kleinen versteckten Schichten und Trainingsbudget – Netzgröße
+und Episodenzahl sind hier der Spielstärke-Regler, nicht Heuristiken oder
+zugeschaltete Suche. Zahlen aus je 300–2000 Eval-Episoden derselben
+`TakeItEasyEnv`-Methodik wie in `train_afterstate.py`, siehe die jeweiligen
+`experiments/<run_id>/`-Ordner (Tags `capacity_probe_16x16`,
+`capacity_80_final`) – keine Schätzung.
 
-Eigenes stärkeres Modell? Trainiere mit `train_afterstate.py` (siehe oben)
-und kopiere die `.pt`-Datei nach `play_models/` – oder committe sie einfach
-so: bei ~3 MB pro Checkpoint ist normales Git ohne Git-LFS völlig
-ausreichend, das Bündeln in `play_models/` statt direkt in `experiments/`
-lässt die generelle `.gitignore`-Regel für Trainings-Rohdaten unangetastet.
+<details>
+<summary><b>Warum „Leicht" bei 96 statt exakt 80 liegt</b></summary>
+
+Ein Netz mit exakt Ø 80 zu treffen ist bei diesem Verfahren überraschend
+schwer: Selbstspiel-Training springt hier nicht sanft von schwach zu stark,
+sondern hat einen scharfen, leicht verrauschten Übergang. Mit einem 8×8-Netz
+lag der Score bei 2.816 Episoden noch bei 56,3 (Std 37,6, sehr instabil),
+bei 3.328 Episoden schon bei 105,4 – der Sprung passiert in einem schmalen
+Fenster von nur ~500 Episoden. Danach pendelt der Wert (3.328→105,4,
+4.000→107,0, 4.352→96,3) statt sich weiter Richtung 80 zu bewegen; 80 liegt
+mitten in diesem instabilen Übergang, nicht auf einem ruhigen Plateau davor
+oder danach. 96,3 bei 4.352 Episoden ist der beste gefundene Kompromiss aus
+Nähe zum Ziel und stabiler (niedriger) Streuung – kein reines Abbrechen
+mitten im Training. Alle Zwischenwerte dieser Suche stehen als eigene Läufe
+in `experiments/` (Tags `capacity_80_v4` u.a.).
+
+Zur Einordnung: die Spielanleitung nennt 150 Punkte als „gutes Ergebnis" für
+einen Menschen – „Mittel" liegt bereits bei 121, „Leicht" bei 96 ist noch
+klar spielbar, aber kein reiner Anfänger-Pushover.
+</details>
+
+Eigenes Modell mit anderer Spielstärke? `train_afterstate.py --hidden 8,8
+--episodes <N>` (oder andere Größen) trainieren, `.pt`-Datei nach
+`play_models/` kopieren und committen – bei wenigen MB pro Checkpoint ist
+normales Git ohne LFS ausreichend. Das Bündeln in `play_models/` statt
+direkt in `experiments/` lässt die generelle `.gitignore`-Regel für
+Trainings-Rohdaten unangetastet.
+
+Zusätzlich weiterhin verfügbar, unabhängig von den drei Stufen:
+`--heuristic greedy_potential`/`random`/`greedy`/`expected_value` (kein
+Modell nötig) und `--depth`/`--endgame-exact` (Phase-9-Suche zu jedem
+`.pt`-Modell dazuschalten, z. B. auch zu `afterstate_300k.pt` für eine noch
+stärkere als „Stark"-Stufe, siehe
+[`reports/phase9_search_report.html`](reports/phase9_search_report.html)).
 
 **Live-Ansicht** (standardmäßig an): nach jedem Zug wird
 `replay/play_<seed>.html` neu geschrieben und beim ersten Zug im Browser

@@ -254,6 +254,43 @@ Trainings-Selbstspiel. Offene nächste Schritte: `--endgame-exact 5` testen
 dem 3M-Modell wiederholen, und mehr Episoden/Seeds für eine belastbarere
 Signifikanz (n=200 reicht nur knapp für die kombinierte Konfiguration).
 
+## Drei Spielstärken für play.py (Netzgröße statt Heuristik)
+
+Auf Wunsch drei eigene Netze für `play.py` trainiert, die per Netzgröße
+(nicht Heuristik oder Suche) gezielt unterschiedlich stark sind – Ziel war
+Ø 80/120/160 mit möglichst wenig Streuung. `train_afterstate.py --hidden`
+steuert dafür die Größe der drei versteckten Schichten.
+
+| Ziel | Netz | Hidden | Episoden | Ø | Std |
+|---|---|---|---|---|---|
+| 80 | `play_models/afterstate_96_tiny.pt` | 8×8 | 4.352 | **96,3** | 26,0 |
+| 120 | `play_models/afterstate_120_small.pt` | 16×16 | 20.000 | **121,0** | 21,9 |
+| 160 | `play_models/afterstate_300k.pt` (Phase 8) | 512×512×512 | 300.000 | **160,4** | 27,3 |
+
+16×16/20.000 traf 120 nahezu exakt, mit niedrigerer Streuung (21,9) als
+jede bisherige Heuristik in diesem Bereich (`greedy_potential`: Std 35,8 bei
+Ø 120,9). 80 war dagegen nicht sauber zu treffen: das Selbstspiel-Training
+hat einen scharfen, leicht verrauschten Übergang statt eines sanften
+Anstiegs. Mit einem 8×8-Netz lag der Score bei 2.816 Episoden noch bei 56,3
+(Std 37,6 – instabil), bei 3.328 Episoden bereits bei 105,4 – der Sprung
+passiert in einem Fenster von nur ~500 Episoden. Danach pendelt der Wert
+(3.328→105,4, 4.000→107,0, 4.352→96,3), statt sich weiter Richtung 80 zu
+bewegen – 80 liegt mitten im instabilen Übergang, nicht auf einem Plateau
+davor oder danach. 96,3 bei 4.352 Episoden ist der beste gefundene
+Kompromiss aus Nähe zum Ziel und stabiler Streuung.
+
+Alle vollständig durchgelaufenen Zwischenversuche stehen als eigene Läufe in
+`experiments/` (Tags `capacity_probe_16x16`, `capacity_probe_32x32`,
+`capacity_80_final`, `capacity_80_v4`); abgebrochene Zwischenversuche ohne
+vollständiges Ergebnis wurden nicht committet. README-Abschnitt „Drei
+Spielstärken" dokumentiert die Nutzung.
+
+**Offene Frage für später:** ob der scharfe Übergang eine Eigenschaft des
+Two-Hot-Wertkopfs ist (Klassifikation über Stützstellen könnte bei kleiner
+Netzkapazität sprunghafter kippen als eine stetige Regression) oder generell
+bei dieser Aufgabe auftritt – mit `--value-head scalar` bei kleiner
+Netzgröße nicht getestet.
+
 ## Nächster Schritt
 
 **Phase 9: Expectimax zur Spielzeit.** Das Orakel (Phase 9-Vorarbeit, oben)
